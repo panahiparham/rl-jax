@@ -1,0 +1,10 @@
+.DS_Store
+.venv
+.venvs/
+__pycache__/
+gsp_paper/
+**/results/
+**/plots/
+!benchmarks/core/plots/
+wheels/
+.cluster/

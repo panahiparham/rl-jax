@@ -1,0 +1,35 @@
+# Cluster settings used by simple-experiments.
+
+[project]
+name = "rl-jax"
+src_dirs = ["src"]
+post_sync = "scripts/install_ale_wheel.sh"
+
+[cluster]
+host = "vulcan"
+root = "$HOME/scratch/rl-jax"
+account = "aip-user"
+
+[venvs]
+cpu = []
+gpu = ["cuda", "atari"]
+
+# default slurm settings.
+[slurm]
+time = "01:00:00"
+cpus_per_task = 4
+mem_per_cpu = "4G"
+
+# Per-experiment overrides.
+[experiments.bench_core]
+time = "02:59:00"
+
+[experiments.atari_20m]
+time = "02:59:00"
+gpus = 1
+mem_per_cpu = "8G"
+
+[experiments.atari_200m]
+time = "23:59:00"
+gpus = 1
+mem_per_cpu = "8G"

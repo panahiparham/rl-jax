@@ -1,0 +1,117 @@
+[project]
+name = "rl-jax"
+version = "0.1.0"
+description = "Simple RL codebase written in jax."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "catch-jax",
+    "equinox>=0.13.8",
+    "flashbax>=0.1.3",
+    "gymnax>=0.0.9",
+    "ipykernel>=7.3.0",
+    "jax>=0.11.0",
+    "optax>=0.2.8",
+    "pinball-jax",
+    "polars>=1.0",
+    "simple-experiments",
+    "tyro>=0.9",
+]
+
+[project.optional-dependencies]
+atari = ["ale-py[xla]>=0.12.0"]
+cuda = ["jax[cuda12]==0.11.0"]
+
+[dependency-groups]
+analysis = [
+    "matplotlib>=3.8",
+    "ipykernel>=6",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.16",
+    "mypy>=2.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+extend-exclude = ["*.md"]
+
+[tool.ruff.format]
+exclude = ["benchmarks/**", "experiments/**"]
+
+[tool.ruff.lint]
+extend-select = ["A", "B", "BLE", "C4", "DTZ", "I", "N", "PLC0415", "S", "SIM", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S608"]
+"src/benchmarking/**" = ["S603", "S607"]
+"src/environments/atari.py" = ["PLC0415"]
+"src/environments/real_atari.py" = ["PLC0415"]
+"tests/test_atari.py" = ["PLC0415"]
+"benchmarks/core/plot.py" = ["I001"]
+"benchmarks/core/run.py" = ["I001"]
+"benchmarks/core/weekly.py" = ["I001"]
+"experiments/*/run.py" = ["I001"]
+"experiments/*/analysis.ipynb" = ["I001"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+show_error_codes = true
+ignore_missing_imports = true
+mypy_path = "src"
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = [
+    "agents",
+    "agents.ddqn",
+    "agents.dqn",
+    "agents.random",
+    "agents.random_buffered",
+    "components.buffer",
+    "components.networks",
+    "environments",
+    "environments.atari",
+    "environments.real_atari",
+    "environments.autoreset",
+    "environments.catch",
+    "environments.classic_control",
+    "environments.pinball",
+    "main",
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = ["agents.ddqn", "agents.dqn"]
+disable_error_code = ["arg-type", "operator", "type-var"]
+
+[[tool.mypy.overrides]]
+module = ["components.buffer"]
+disable_error_code = ["no-any-return"]
+
+[[tool.mypy.overrides]]
+module = ["main"]
+disable_error_code = ["attr-defined", "valid-type"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/envs", "src/components", "src/agents", "src/environments",
+    "src/benchmarking", "src/analysis",
+]
+
+[tool.uv.sources]
+pinball-jax = { git = "https://github.com/panahiparham/pinball-jax" }
+catch-jax = { git = "https://github.com/panahiparham/catch-jax" }
+simple-experiments = { git = "https://github.com/panahiparham/simple-experiments" }
