@@ -17,6 +17,7 @@ each week's results.
 
 from __future__ import annotations
 
+import argparse
 import dataclasses
 import fcntl
 import json
@@ -24,25 +25,46 @@ import os
 import shlex
 import shutil
 import subprocess
-from collections.abc import Sequence
+import sys
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import IO, Any
 
+from experiment.design import Experiment
+from experiment.slurm import ClusterConfig
 from experiment.slurm import dispatch as _slurm_dispatch
 from experiment.slurm import is_queued, load_config, repo_root
 from experiment.slurm import wipe as _slurm_wipe
-from experiment.weekly import DurableHistory, JobStatus, Phase, TransientState
+from experiment.weekly import (
+    DurableHistory,
+    JobStatus,
+    Phase,
+    TransientState,
+    WeeklyBenchmarkConfig,
+    tick,
+)
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from config import ENVIRONMENTS, EXPERIMENT, PLOTS_DIR
+from report import render_plots
+
+LABEL = EXPERIMENT.name
+_RUN_PY = Path(__file__).resolve().parent / "run.py"
+_NUM_WORKERS = 1
 
 
-def _state_to_json(state: TransientState) -> dict:
-    data = dataclasses.asdict(state)
+def _state_to_json(state: TransientState) -> dict[str, Any]:
+    data: dict[str, Any] = dataclasses.asdict(state)
     data["phase"] = state.phase.value
     data["next_wake_at"] = state.next_wake_at.isoformat()
     return data
 
 
-def _state_from_json(data: dict) -> TransientState:
+def _state_from_json(data: dict[str, Any]) -> TransientState:
     return TransientState(
         phase=Phase(data["phase"]),
         next_wake_at=datetime.fromisoformat(data["next_wake_at"]),
@@ -97,7 +119,7 @@ class _StateJsonHistoryStore:
 
 
 @contextmanager
-def _held(handle):
+def _held(handle: IO[str]) -> Iterator[None]:
     try:
         yield
     finally:
@@ -122,7 +144,7 @@ class _FlockLock:
         return _held(handle)
 
 
-def _reraise_as_runtime(fn, /, *args, **kwargs):
+def _reraise_as_runtime[T](fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
     """Run an experiment.slurm call, translating its SystemExit.
 
     tick() only wraps a Dispatcher/Publisher call's own exception type in its
@@ -136,7 +158,9 @@ def _reraise_as_runtime(fn, /, *args, **kwargs):
         raise RuntimeError(str(exc)) from exc
 
 
-def _remote_or_local(cfg, command: str) -> subprocess.CompletedProcess:
+def _remote_or_local(
+    cfg: ClusterConfig, command: str
+) -> subprocess.CompletedProcess[str]:
     """Run a shell command on the login node, or locally under EXPERIMENT_LOCAL_MODE.
 
     Mirrors experiment.slurm's own local-mode switch (used by its test
@@ -165,7 +189,8 @@ class _SlurmDispatcher:
     def _dispatched_sha(self) -> str | None:
         if not self._state_path.is_file():
             return None
-        return json.loads(self._state_path.read_text()).get("sha")
+        sha = json.loads(self._state_path.read_text()).get("sha")
+        return sha if isinstance(sha, str) else None
 
     def submit(self, sha: str) -> str:
         """Dispatch a fresh sweep for ``sha``, unless one is already running.
@@ -285,3 +310,79 @@ class _GhPublisher:
             cwd=self._repo_root, capture_output=True, text=True, check=True,
         )
         return proc.stdout.strip()
+
+
+def _reporter(sha: str, experiment: Experiment, out_dir: Path) -> Sequence[Path]:
+    """Sync the cluster's results home, then render this week's plots."""
+    del sha  # render_plots renders whatever is now stored locally
+    synced = subprocess.run(
+        [sys.executable, str(_RUN_PY), "sync"], cwd=_REPO_ROOT, check=False
+    )
+    if synced.returncode != 0:
+        raise RuntimeError(f"[{LABEL}] sync failed")
+    return render_plots(experiment, ENVIRONMENTS, out_dir)
+
+
+def _remote_sha(history_store: _StateJsonHistoryStore) -> str:
+    """origin/main's current sha, falling back to the last completed one.
+
+    tick() calls this outside its try/except, so it must never raise: a
+    transient git failure has to read as "nothing new" rather than crash
+    the tick.
+    """
+    proc = subprocess.run(
+        ["git", "ls-remote", "origin", "refs/heads/main"],
+        cwd=_REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    line = proc.stdout.strip()
+    if proc.returncode == 0 and line:
+        return line.split()[0]
+    history = history_store.load()
+    return history.last_completed_sha if history else ""
+
+
+def _next_scheduled_wake(now: datetime) -> datetime:
+    return now + timedelta(days=7)
+
+
+def _poll_interval(now: datetime) -> datetime:
+    return now + timedelta(minutes=20)
+
+
+def _config() -> WeeklyBenchmarkConfig:
+    history_store = _StateJsonHistoryStore(_REPO_ROOT / "benchmarks" / "state.json")
+    return WeeklyBenchmarkConfig(
+        label=LABEL,
+        experiment=EXPERIMENT,
+        remote_sha=lambda: _remote_sha(history_store),
+        next_scheduled_wake=_next_scheduled_wake,
+        poll_interval=_poll_interval,
+        dispatcher=_SlurmDispatcher(
+            label=LABEL, run_py=_RUN_PY, results_dir=EXPERIMENT.results_dir,
+            num_workers=_NUM_WORKERS,
+        ),
+        reporter=_reporter,
+        publisher=_GhPublisher(repo_root=_REPO_ROOT, plots_dir=PLOTS_DIR),
+        transient_store=_FileTransientStore(
+            _REPO_ROOT / ".cluster" / f"{LABEL}-weekly.json"
+        ),
+        history_store=history_store,
+        lock=_FlockLock(_REPO_ROOT / ".cluster" / f"{LABEL}-weekly.lock"),
+        out_dir=PLOTS_DIR,
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="weekly.py")
+    sub = parser.add_subparsers(dest="mode", required=True)
+    sub.add_parser("tick")
+    parser.parse_args()
+
+    state = tick(_config(), datetime.now(UTC))
+    detail = f": {state.last_error}" if state.last_error else ""
+    print(f"[{LABEL}] {state.phase.value}{detail}")
+    return 1 if state.phase is Phase.FAILED else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
