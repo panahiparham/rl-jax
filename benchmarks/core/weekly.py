@@ -18,7 +18,9 @@ each week's results.
 from __future__ import annotations
 
 import dataclasses
+import fcntl
 import json
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -84,3 +86,29 @@ class _StateJsonHistoryStore:
             "last_run": history.last_completed_at.isoformat(),
         }
         self._path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+@contextmanager
+def _held(handle):
+    try:
+        yield
+    finally:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        handle.close()
+
+
+class _FlockLock:
+    """Coordinates against overlapping ticks with an flock on a marker file."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def try_acquire(self) -> AbstractContextManager[None] | None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        handle = self._path.open("w")
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            return None
+        return _held(handle)
