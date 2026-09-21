@@ -20,9 +20,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from benchmarking.report import plot_environment
-
 from config import ENVIRONMENTS, EXPERIMENT, PLOTS_DIR
+from report import plot_environment
 
 
 def main() -> int:

@@ -6,9 +6,6 @@ band, the same shape as ``experiments/tuned``'s learning curves. Plots are
 saved wherever the caller points ``plots_dir`` - point it at a directory git
 actually tracks, since ``**/plots/`` is gitignored except where a benchmark
 negates it (see ``benchmarks/core/plots/``).
-
-Generic over any benchmark experiment (not hardcoded to ``benchmarks/core``),
-so a future benchmark folder reuses it rather than duplicating this logic.
 """
 
 from __future__ import annotations

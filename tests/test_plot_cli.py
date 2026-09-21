@@ -2,7 +2,7 @@
 
 Only the no-results path runs here: with results on disk the script writes
 into the repo's own benchmarks/core/plots, so the rendering itself is covered
-against a tmp_path in test_report.py, at the benchmarking.report level.
+against a tmp_path in test_report.py, at the report.py level.
 """
 
 from __future__ import annotations

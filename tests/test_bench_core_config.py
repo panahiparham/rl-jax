@@ -8,13 +8,12 @@ from pathlib import Path
 
 from experiment import commands
 
-from benchmarking import report
-
 _REPO = Path(__file__).resolve().parents[1]
 _BENCH_CORE = _REPO / "benchmarks" / "core"
 
 sys.path.insert(0, str(_BENCH_CORE))
 import config as bench_core_config
+import report
 
 
 def test_components_are_dqn_ddqn_random_trios_on_ten_offset_seeds():

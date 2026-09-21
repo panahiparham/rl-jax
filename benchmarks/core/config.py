@@ -9,10 +9,10 @@ tuned's range(10, 110), so these numbers sit alongside that experiment's own
 and never reuse the seeds experiments/tuning picked the learning rates on.
 
 Decoupled from experiments/ on purpose: this is what the weekly Vulcan run
-recomputes from scratch every time (see benchmarking.schedule and
-slurm.wipe()), so its hypers must stay stable across weeks rather than drift
-with whatever experiments/ happens to be exploring. Hence copied recipes rather
-than an import of tuned's config.
+recomputes from scratch every time (see weekly.py and slurm.wipe()), so its
+hypers must stay stable across weeks rather than drift with whatever
+experiments/ happens to be exploring. Hence copied recipes rather than an
+import of tuned's config.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from experiment.design import Component, Experiment
+from report import METRIC_REWARD, Environment, Series
 
 from agents.ddqn import DDQNConfig
 from agents.dqn import DQNConfig
 from agents.random import RandomConfig
-from benchmarking.report import METRIC_REWARD, Environment, Series
 from environments.catch import CatchConfig
 from environments.classic_control import (
     AcrobotConfig,
