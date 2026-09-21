@@ -24,8 +24,9 @@ import os
 import shlex
 import shutil
 import subprocess
+from collections.abc import Sequence
 from contextlib import AbstractContextManager, contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from experiment.slurm import dispatch as _slurm_dispatch
@@ -214,3 +215,73 @@ class _SlurmDispatcher:
         if all(s.startswith("COMPLETED") for s in states):
             return JobStatus.SUCCEEDED
         return JobStatus.FAILED
+
+
+class _GhPublisher:
+    """Commits the rendered plots + history, and opens (or reuses) a PR."""
+
+    def __init__(self, *, repo_root: Path, plots_dir: Path) -> None:
+        self._repo_root = repo_root
+        self._plots_dir = plots_dir
+
+    def publish(self, sha: str, artifacts: Sequence[Path]) -> str:
+        del artifacts  # already rendered to self._plots_dir by the Reporter
+        del sha  # the branch name is what's deduped on, not the commit
+        run_date = datetime.now(UTC).date().isoformat()
+        branch = f"chore/weekly-benchmark-{run_date}"
+
+        existing = self._existing_pr(branch)
+        if existing is not None:
+            return existing
+
+        # -B off a freshly-fetched origin/main: idempotent regardless of what's
+        # currently checked out, or of a same-day PR that didn't get this far.
+        self._git("fetch", "origin", "main")
+        self._git("checkout", "-B", branch, "origin/main")
+        self._git(
+            "add", "benchmarks/state.json",
+            str(self._plots_dir.relative_to(self._repo_root)),
+        )
+        self._git("commit", "-m", f"data: weekly benchmark run {run_date}")
+        self._git("push", "--force", "-u", "origin", branch)
+        return self._create_pr(branch, run_date)
+
+    def _existing_pr(self, branch: str) -> str | None:
+        proc = subprocess.run(
+            ["gh", "pr", "view", branch, "--json", "url", "-q", ".url"],
+            cwd=self._repo_root, capture_output=True, text=True, check=False,
+        )
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    def _git(self, *args: str) -> None:
+        subprocess.run(
+            ["git", *args], cwd=self._repo_root, check=True,
+            capture_output=True, text=True,
+        )
+
+    def _repo_slug(self) -> str:
+        proc = subprocess.run(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+            cwd=self._repo_root, capture_output=True, text=True, check=True,
+        )
+        return proc.stdout.strip()
+
+    def _pr_body(self, branch: str) -> str:
+        slug = self._repo_slug()
+        lines = ["Automated run of bench_core, one learning curve per environment.", ""]
+        for png in sorted(self._plots_dir.glob("*.png")):
+            rel = png.relative_to(self._repo_root).as_posix()
+            url = f"https://github.com/{slug}/blob/{branch}/{rel}?raw=true"
+            lines += [f"### {png.stem}", "", f"![{png.stem}]({url})", ""]
+        return "\n".join(lines)
+
+    def _create_pr(self, branch: str, run_date: str) -> str:
+        proc = subprocess.run(
+            [
+                "gh", "pr", "create",
+                "--title", f"Weekly benchmark: {run_date}",
+                "--body", self._pr_body(branch),
+            ],
+            cwd=self._repo_root, capture_output=True, text=True, check=True,
+        )
+        return proc.stdout.strip()
