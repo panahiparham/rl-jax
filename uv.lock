@@ -1292,72 +1292,6 @@ wheels = [
 ]
 
 [[package]]
-name = "online-gsp"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "catch-jax" },
-    { name = "equinox" },
-    { name = "flashbax" },
-    { name = "gymnax" },
-    { name = "ipykernel" },
-    { name = "jax" },
-    { name = "optax" },
-    { name = "pinball-jax" },
-    { name = "polars" },
-    { name = "simple-experiments" },
-    { name = "tyro" },
-]
-
-[package.optional-dependencies]
-atari = [
-    { name = "ale-py", extra = ["xla"] },
-]
-cuda = [
-    { name = "jax", extra = ["cuda12"] },
-]
-
-[package.dev-dependencies]
-analysis = [
-    { name = "ipykernel" },
-    { name = "matplotlib" },
-]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ale-py", extras = ["xla"], marker = "extra == 'atari'", specifier = ">=0.12.0" },
-    { name = "catch-jax", git = "https://github.com/panahiparham/catch-jax" },
-    { name = "equinox", specifier = ">=0.13.8" },
-    { name = "flashbax", specifier = ">=0.1.3" },
-    { name = "gymnax", specifier = ">=0.0.9" },
-    { name = "ipykernel", specifier = ">=7.3.0" },
-    { name = "jax", specifier = ">=0.11.0" },
-    { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda'", specifier = "==0.11.0" },
-    { name = "optax", specifier = ">=0.2.8" },
-    { name = "pinball-jax", git = "https://github.com/panahiparham/pinball-jax" },
-    { name = "polars", specifier = ">=1.0" },
-    { name = "simple-experiments", git = "https://github.com/panahiparham/simple-experiments" },
-    { name = "tyro", specifier = ">=0.9" },
-]
-provides-extras = ["atari", "cuda"]
-
-[package.metadata.requires-dev]
-analysis = [
-    { name = "ipykernel", specifier = ">=6" },
-    { name = "matplotlib", specifier = ">=3.8" },
-]
-dev = [
-    { name = "mypy", specifier = ">=2.3" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.16" },
-]
-
-[[package]]
 name = "opencv-python"
 version = "5.0.0.93"
 source = { registry = "https://pypi.org/simple" }
@@ -1849,6 +1783,72 @@ wheels = [
 ]
 
 [[package]]
+name = "rl-jax"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "catch-jax" },
+    { name = "equinox" },
+    { name = "flashbax" },
+    { name = "gymnax" },
+    { name = "ipykernel" },
+    { name = "jax" },
+    { name = "optax" },
+    { name = "pinball-jax" },
+    { name = "polars" },
+    { name = "simple-experiments" },
+    { name = "tyro" },
+]
+
+[package.optional-dependencies]
+atari = [
+    { name = "ale-py", extra = ["xla"] },
+]
+cuda = [
+    { name = "jax", extra = ["cuda12"] },
+]
+
+[package.dev-dependencies]
+analysis = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
+]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ale-py", extras = ["xla"], marker = "extra == 'atari'", specifier = ">=0.12.0" },
+    { name = "catch-jax", git = "https://github.com/panahiparham/catch-jax" },
+    { name = "equinox", specifier = ">=0.13.8" },
+    { name = "flashbax", specifier = ">=0.1.3" },
+    { name = "gymnax", specifier = ">=0.0.9" },
+    { name = "ipykernel", specifier = ">=7.3.0" },
+    { name = "jax", specifier = ">=0.11.0" },
+    { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda'", specifier = "==0.11.0" },
+    { name = "optax", specifier = ">=0.2.8" },
+    { name = "pinball-jax", git = "https://github.com/panahiparham/pinball-jax" },
+    { name = "polars", specifier = ">=1.0" },
+    { name = "simple-experiments", git = "https://github.com/panahiparham/simple-experiments" },
+    { name = "tyro", specifier = ">=0.9" },
+]
+provides-extras = ["atari", "cuda"]
+
+[package.metadata.requires-dev]
+analysis = [
+    { name = "ipykernel", specifier = ">=6" },
+    { name = "matplotlib", specifier = ">=3.8" },
+]
+dev = [
+    { name = "mypy", specifier = ">=2.3" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.16" },
+]
+
+[[package]]
 name = "ruff"
 version = "0.16.6"
 source = { registry = "https://pypi.org/simple" }
@@ -1931,7 +1931,7 @@ wheels = [
 [[package]]
 name = "simple-experiments"
 version = "0.1.0"
-source = { git = "https://github.com/panahiparham/simple-experiments#3e553564986b59452edcd15a2273f7c89e919b4b" }
+source = { git = "https://github.com/panahiparham/simple-experiments#815ca84961e5d424c652469d69ca712c6598c66f" }
 dependencies = [
     { name = "numpy" },
     { name = "polars" },
