@@ -259,7 +259,7 @@ def run_py(sandbox: Sandbox, *args: str, expect_ok: bool = True):
 
 def setup_cluster(sandbox: Sandbox, expect_ok: bool = True):
     proc = subprocess.run(
-        ["bash", "scripts/setup_cluster.sh"],
+        [sys.executable, "scripts/setup_cluster.py"],
         cwd=str(sandbox.repo),
         env={**os.environ, **sandbox.env},
         capture_output=True,
@@ -268,7 +268,7 @@ def setup_cluster(sandbox: Sandbox, expect_ok: bool = True):
     )
     if expect_ok and proc.returncode != 0:
         pytest.fail(
-            f"setup_cluster.sh failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+            f"setup_cluster.py failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
         )
     return proc
 
