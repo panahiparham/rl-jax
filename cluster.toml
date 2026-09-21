@@ -7,8 +7,8 @@ post_sync = "scripts/install_ale_wheel.sh"
 
 [cluster]
 host = "vulcan"
-root = "$HOME/scratch/rl-jax"
-account = "aip-user"
+root = "$adam/rl-jax"
+account = "aip-amw8"
 
 [venvs]
 cpu = []
