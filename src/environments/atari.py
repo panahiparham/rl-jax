@@ -171,6 +171,11 @@ def build(config: AtariConfig):
         "num_envs": 1,
         "frameskip": int(config.FRAMESKIP),
         "repeat_action_probability": float(config.STICKY_ACTIONS),
+        "img_height": int(config.IMG_HEIGHT),
+        "img_width": int(config.IMG_WIDTH),
+        "grayscale": bool(config.GRAYSCALE),
+        "full_action_space": not config.LIMITED_ACTION_SPACE,
+        "noop_max": int(config.NOOP_MAX),
     }
     if config.EPISODE_CUTOFF and config.EPISODE_CUTOFF > 0:
         kwargs["max_num_frames_per_episode"] = int(config.EPISODE_CUTOFF) * int(
