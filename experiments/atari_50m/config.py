@@ -26,10 +26,12 @@ _DQN_HYPERS = {
     "NETWORK_PRESET": "nature_cnn",
 }
 
-# Agent0 has no TARGET_NETWORK_FREQUENCY (no target network); derive its
-# hypers from the same source of truth minus that one field.
+# Agent0 has no TARGET_NETWORK_FREQUENCY (no target network) and uses the
+# LN variant of the Nature CNN; derive its hypers from the same source of
+# truth minus that field, with NETWORK_PRESET overridden.
 _AGENT0_HYPERS = {
-    k: v for k, v in _DQN_HYPERS.items() if k != "TARGET_NETWORK_FREQUENCY"
+    **{k: v for k, v in _DQN_HYPERS.items() if k != "TARGET_NETWORK_FREQUENCY"},
+    "NETWORK_PRESET": "nature_cnn_ln",
 }
 
 _ATARI = AtariConfig()
