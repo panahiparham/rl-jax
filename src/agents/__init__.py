@@ -1,5 +1,6 @@
 from typing import Any, NamedTuple
 
+from agents.agent0 import Agent0Agent, Agent0Config
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
 from agents.random import RandomAgent, RandomConfig
@@ -20,6 +21,7 @@ AGENTS: dict[str, AgentSpec] = {
     "random_buffered": AgentSpec(RandomBufferConfig, RandomBufferAgent),
     "dqn": AgentSpec(DQNConfig, DQNAgent),
     "ddqn": AgentSpec(DDQNConfig, DDQNAgent),
+    "agent0": AgentSpec(Agent0Config, Agent0Agent),
 }
 
 
@@ -31,6 +33,7 @@ def get_config(name: str):
 
 __all__ = [
     "AGENTS",
+    "Agent0Config",
     "AgentSpec",
     "DDQNConfig",
     "DQNConfig",
