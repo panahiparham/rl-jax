@@ -38,6 +38,7 @@ class DQNConfig:
     NETWORK_PRESET: str = "mlp"  # "mlp" (vector obs) or "nature_cnn" (image obs)
     ADAM_EPS: float = traced(1e-8)
     SEED: int = 42
+    REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
 
 
 class DQNState(NamedTuple):
@@ -126,6 +127,8 @@ class DQNAgent:
         truncation: jax.Array,
     ):
         config = self._config
+        if config.REWARD_CLIP:
+            reward = jnp.sign(reward)
         buffer_state = self._buffer.add(
             state.buffer_state, obs, action, reward, termination, truncation
         )
