@@ -8,7 +8,14 @@ import jax.numpy as jnp
 import optax
 from experiment.hypers import traced
 
-from components import NatureCNN, QNetwork, build_buffer, epsilon_greedy_action
+from components import (
+    NatureCNN,
+    NatureCNNLN,
+    QNetwork,
+    QNetworkLN,
+    build_buffer,
+    epsilon_greedy_action,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,7 +42,8 @@ class DQNConfig:
     EPSILON_END: float = traced(0.05)
     EPSILON_FRACTION: float = traced(0.5)
     HIDDEN_SIZE: int = 64
-    NETWORK_PRESET: str = "mlp"  # "mlp" (vector obs) or "nature_cnn" (image obs)
+    # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
+    NETWORK_PRESET: str = "mlp"
     ADAM_EPS: float = traced(1e-8)
     SEED: int = 42
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
@@ -64,8 +72,14 @@ class DQNAgent:
     def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
         if self._config.NETWORK_PRESET == "nature_cnn":
             return NatureCNN(obs_shape, action_dim, key)
+        if self._config.NETWORK_PRESET == "nature_cnn_ln":
+            return NatureCNNLN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "mlp":
             return QNetwork(
+                math.prod(obs_shape), action_dim, self._config.HIDDEN_SIZE, key
+            )
+        if self._config.NETWORK_PRESET == "mlp_ln":
+            return QNetworkLN(
                 math.prod(obs_shape), action_dim, self._config.HIDDEN_SIZE, key
             )
         raise ValueError(f"unknown NETWORK_PRESET {self._config.NETWORK_PRESET!r}")
