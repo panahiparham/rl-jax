@@ -54,17 +54,22 @@ class _FakeVectorEnv:
         h: int = 84,
         w: int = 84,
         n: int = 6,
+        colours: int = 0,
     ) -> None:
         self.num_envs = num_envs
         self._period, self._frames, self._h, self._w = period, frames, h, w
-        self.single_observation_space = _Box((frames, h, w), jnp.uint8)
+        self._colours = colours
+        obs_shape = (frames, h, w, colours) if colours else (frames, h, w)
+        self.single_observation_space = _Box(obs_shape, jnp.uint8)
         self.single_action_space = _Discrete(n)
 
     def xla(self):
         frames, h, w, period = self._frames, self._h, self._w, self._period
+        colours = self._colours
+        obs_shape = (1, frames, h, w, colours) if colours else (1, frames, h, w)
 
         def obs(val):
-            return jnp.full((1, frames, h, w), val, jnp.uint8)
+            return jnp.full(obs_shape, val, jnp.uint8)
 
         init = jnp.zeros((8,), jnp.uint8)  # [0]=step count, [1]=pending-reset flag
 
@@ -193,6 +198,20 @@ def test_immediate_autoreset_under_jit():
     assert term.tolist() == [False, False, True, False, False, True, False]
     assert obs.tolist() == [1, 2, 0, 1, 2, 0, 1]
     assert r.tolist() == [1.0] * 7
+
+
+def test_rgb_spaces_fold_frames_and_colours():
+    env = AtariEnvLike(_FakeVectorEnv(frames=4, h=210, w=160, colours=3))
+    assert env.observation_space().shape == (210, 160, 12)
+    assert env.observation_space().dtype == jnp.uint8
+
+
+def test_rgb_reset_and_step_shapes():
+    env = AtariEnvLike(_FakeVectorEnv(frames=4, h=210, w=160, colours=3))
+    obs, state = env.reset(jax.random.key(0))
+    assert obs.shape == (210, 160, 12) and obs.dtype == jnp.uint8
+    obs2, _state2, _r, _te, _tr, _i = env.step(jax.random.key(1), state, jnp.int32(0))
+    assert obs2.shape == (210, 160, 12)
 
 
 def test_num_envs_gt_one_rejected():
