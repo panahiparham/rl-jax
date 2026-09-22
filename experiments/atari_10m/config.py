@@ -26,6 +26,12 @@ _DQN_HYPERS = {
 
 _ATARI = AtariConfig()
 
+_REAL_ATARI = AtariConfig(
+    LIMITED_ACTION_SPACE=False,
+    EPISODIC_LIFE=False,
+    NOOP_MAX=0,
+)
+
 EXPERIMENT = Experiment(
     name="atari_10m",
     results_dir=Path(__file__).resolve().parent / "results",
@@ -37,6 +43,18 @@ EXPERIMENT = Experiment(
                 ENV="atari",
                 AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
                 ENV_HYPERS=_ATARI,
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=[0, 1, 2],
+            shard_size=1,
+        ),
+        Component(
+            name="dqn_real_atari",
+            config=ExperimentConfig(
+                AGENT="dqn",
+                ENV="atari",
+                AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=False),
+                ENV_HYPERS=_REAL_ATARI,
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
             seeds=[0, 1, 2],
