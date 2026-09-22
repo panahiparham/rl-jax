@@ -8,6 +8,12 @@ from main import ExperimentConfig
 
 _GAMES = ["battle_zone", "ms_pacman"]
 
+# DQNConfig.SEED is declared but never read by the agent - the run's actual
+# PRNG seed is Component.seeds below. Sweeping it here is a dummy hyper: it
+# only forces each replicate into its own run_id, so 3 identical (hyper,
+# seed) runs land as 3 distinct rows instead of deduping to one.
+_REPLICATES = [0, 1, 2]
+
 _DQN_HYPERS = {
     "TOTAL_TIMESTEPS": 2_500_000,       # 10M frames at FRAMESKIP=4
     "LR": 6.25e-05,
@@ -38,7 +44,7 @@ EXPERIMENT = Experiment(
                 AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
                 ENV_HYPERS=_ATARI,
             ),
-            sweep={"ENV_HYPERS.GAME": _GAMES},
+            sweep={"ENV_HYPERS.GAME": _GAMES, "AGENT_HYPERS.SEED": _REPLICATES},
             seeds=[0],
             shard_size=1,
         ),
