@@ -69,6 +69,7 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = [
     "agents",
+    "agents.agent0",
     "agents.ddqn",
     "agents.dqn",
     "agents.random",
@@ -88,7 +89,7 @@ disallow_incomplete_defs = false
 disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
-module = ["agents.ddqn", "agents.dqn"]
+module = ["agents.agent0", "agents.ddqn", "agents.dqn"]
 disable_error_code = ["arg-type", "operator", "type-var"]
 
 [[tool.mypy.overrides]]
