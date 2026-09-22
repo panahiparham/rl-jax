@@ -51,7 +51,6 @@ extend-select = ["A", "B", "BLE", "C4", "DTZ", "I", "N", "PLC0415", "S", "SIM", 
 "tests/**" = ["S101", "S603", "S607", "S608"]
 "benchmarks/core/**" = ["S603", "S607"]
 "src/environments/atari.py" = ["PLC0415"]
-"src/environments/real_atari.py" = ["PLC0415"]
 "tests/test_atari.py" = ["PLC0415"]
 "benchmarks/core/plot.py" = ["I001"]
 "benchmarks/core/run.py" = ["I001"]
@@ -78,7 +77,6 @@ module = [
     "components.networks",
     "environments",
     "environments.atari",
-    "environments.real_atari",
     "environments.autoreset",
     "environments.catch",
     "environments.classic_control",
