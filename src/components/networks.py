@@ -80,3 +80,37 @@ class NatureCNN(eqx.Module):
         x = jax.nn.relu(self.conv3(x))
         x = jax.nn.relu(self.head(jnp.ravel(x)))
         return self.out(x)
+
+
+class NatureCNNLN(eqx.Module):
+    """NatureCNN with a no-affine LayerNorm after the dense head, before its relu.
+
+    The conv torso is left unnormalized; only the head follows QNetworkLN's
+    "every hidden layer, not the output" convention.
+    """
+
+    conv1: eqx.nn.Conv2d
+    conv2: eqx.nn.Conv2d
+    conv3: eqx.nn.Conv2d
+    head: eqx.nn.Linear
+    head_ln: eqx.nn.LayerNorm
+    out: eqx.nn.Linear
+
+    def __init__(self, obs_shape: tuple[int, ...], action_dim: int, key: jax.Array):
+        k1, k2, k3, k4, k5 = jax.random.split(key, 5)
+        channels = obs_shape[-1]
+        self.conv1 = eqx.nn.Conv2d(channels, 32, kernel_size=8, stride=4, key=k1)
+        self.conv2 = eqx.nn.Conv2d(32, 64, kernel_size=4, stride=2, key=k2)
+        self.conv3 = eqx.nn.Conv2d(64, 64, kernel_size=3, stride=1, key=k3)
+        self.head = eqx.nn.Linear(_nature_flat_dim(obs_shape), 512, key=k4)
+        self.head_ln = eqx.nn.LayerNorm(512, use_weight=False, use_bias=False)
+        self.out = eqx.nn.Linear(512, action_dim, key=k5)
+
+    def __call__(self, x: jax.Array):
+        # (H,W,C) uint8 -> (C,H,W) float in [0,1]
+        x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32) / 255.0
+        x = jax.nn.relu(self.conv1(x))
+        x = jax.nn.relu(self.conv2(x))
+        x = jax.nn.relu(self.conv3(x))
+        x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
+        return self.out(x)

@@ -8,12 +8,13 @@ from components.buffer import (
     n_step_return,
     stored_transitions,
 )
-from components.networks import NatureCNN, QNetwork, QNetworkLN
+from components.networks import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
 from components.policy import epsilon_greedy_action
 
 __all__ = [
     "Batch",
     "NatureCNN",
+    "NatureCNNLN",
     "QNetwork",
     "QNetworkLN",
     "ReplayBuffer",
