@@ -178,6 +178,9 @@ def build(config: AtariConfig):
         "full_action_space": not config.LIMITED_ACTION_SPACE,
         "noop_max": int(config.NOOP_MAX),
         "episodic_life": bool(config.EPISODIC_LIFE),
+        # ale clips by default; the agent's REWARD_CLIP owns clipping, so the
+        # reward reaching the caller stays the game's own score.
+        "reward_clipping": False,
     }
     if config.EPISODE_CUTOFF and config.EPISODE_CUTOFF > 0:
         kwargs["max_num_frames_per_episode"] = int(config.EPISODE_CUTOFF) * int(
