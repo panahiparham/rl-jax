@@ -35,11 +35,16 @@ gpus = 1
 mem_per_cpu = "8G"
 
 [experiments.atari_50m]
-time = "02:59:00"
+time = "11:59:00"
 gpus = 1
 mem_per_cpu = "8G"
 
-[experiments.atari_50m_bu]
-time = "11:59:00"
+[experiments.atari_10m]
+time = "2:59:00"
+gpus = 1
+mem_per_cpu = "8G"
+
+[experiments.atari_reproducibility]
+time = "2:59:00"
 gpus = 1
 mem_per_cpu = "8G"
