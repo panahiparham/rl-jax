@@ -21,6 +21,30 @@ class QNetwork(eqx.Module):
         return self.layer3(x)
 
 
+class QNetworkLN(eqx.Module):
+    """QNetwork with a no-affine LayerNorm after each hidden layer."""
+
+    layer1: eqx.nn.Linear
+    ln1: eqx.nn.LayerNorm
+    layer2: eqx.nn.Linear
+    ln2: eqx.nn.LayerNorm
+    layer3: eqx.nn.Linear
+
+    def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.layer1 = eqx.nn.Linear(obs_dim, hidden_size, key=k1)
+        self.ln1 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
+        self.layer2 = eqx.nn.Linear(hidden_size, hidden_size, key=k2)
+        self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
+        self.layer3 = eqx.nn.Linear(hidden_size, action_dim, key=k3)
+
+    def __call__(self, x: jax.Array):
+        x = jnp.ravel(x)
+        x = jax.nn.relu(self.ln1(self.layer1(x)))
+        x = jax.nn.relu(self.ln2(self.layer2(x)))
+        return self.layer3(x)
+
+
 def _nature_flat_dim(obs_shape: tuple[int, ...]):
     """Flattened size after the Nature-DQN conv stack, computed host-side."""
     h, w = obs_shape[0], obs_shape[1]
