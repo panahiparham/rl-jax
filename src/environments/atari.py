@@ -12,6 +12,11 @@ class AtariConfig:
     FRAMESKIP: int = 4
     STICKY_ACTIONS: float = 0.25
     EPISODE_CUTOFF: int = 27000
+    IMG_HEIGHT: int = 84
+    IMG_WIDTH: int = 84
+    GRAYSCALE: bool = True
+    LIMITED_ACTION_SPACE: bool = True
+    NOOP_MAX: int = 30
 
 
 class _Box:
