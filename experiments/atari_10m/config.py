@@ -39,7 +39,7 @@ EXPERIMENT = Experiment(
                 ENV_HYPERS=_ATARI,
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=[0],
+            seeds=[0, 1, 2],
             shard_size=1,
         ),
     ],
