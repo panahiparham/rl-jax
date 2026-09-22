@@ -1,4 +1,4 @@
-"""End-to-end tests for the benchmark plot renderer (benchmarking.report)."""
+"""End-to-end tests for the benchmark plot renderer (benchmarks/core/report.py)."""
 
 from __future__ import annotations
 
@@ -10,13 +10,12 @@ import numpy as np
 import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_REPO / "src"))
+sys.path.insert(0, str(_REPO / "benchmarks" / "core"))
 
+import report
 from experiment.design import Component, Experiment
 from experiment.plan import Run, Shard
 from experiment.results import ResultWriter
-
-from benchmarking import report
 
 T = 20
 
