@@ -2,6 +2,7 @@ from pathlib import Path
 
 from experiment.design import Component, Experiment
 
+from agents.agent0 import Agent0Config
 from agents.dqn import DQNConfig
 from environments.atari import AtariConfig
 from main import ExperimentConfig
@@ -23,6 +24,12 @@ _DQN_HYPERS = {
     "EPSILON_END": 0.01,
     "EPSILON_FRACTION": 0.05,
     "NETWORK_PRESET": "nature_cnn",
+}
+
+# Agent0 has no TARGET_NETWORK_FREQUENCY (no target network); derive its
+# hypers from the same source of truth minus that one field.
+_AGENT0_HYPERS = {
+    k: v for k, v in _DQN_HYPERS.items() if k != "TARGET_NETWORK_FREQUENCY"
 }
 
 _ATARI = AtariConfig()
@@ -55,6 +62,30 @@ EXPERIMENT = Experiment(
                 AGENT="dqn",
                 ENV="atari",
                 AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=False),
+                ENV_HYPERS=_REAL_ATARI,
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=[0],
+            shard_size=1,
+        ),
+        Component(
+            name="agent0_atari",
+            config=ExperimentConfig(
+                AGENT="agent0",
+                ENV="atari",
+                AGENT_HYPERS=Agent0Config(**_AGENT0_HYPERS, REWARD_CLIP=True),
+                ENV_HYPERS=_ATARI,
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=[0],
+            shard_size=1,
+        ),
+        Component(
+            name="agent0_real_atari",
+            config=ExperimentConfig(
+                AGENT="agent0",
+                ENV="atari",
+                AGENT_HYPERS=Agent0Config(**_AGENT0_HYPERS, REWARD_CLIP=False),
                 ENV_HYPERS=_REAL_ATARI,
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
