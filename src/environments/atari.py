@@ -17,6 +17,7 @@ class AtariConfig:
     GRAYSCALE: bool = True
     LIMITED_ACTION_SPACE: bool = True
     NOOP_MAX: int = 30
+    EPISODIC_LIFE: bool = True
 
 
 class _Box:
@@ -176,6 +177,7 @@ def build(config: AtariConfig):
         "grayscale": bool(config.GRAYSCALE),
         "full_action_space": not config.LIMITED_ACTION_SPACE,
         "noop_max": int(config.NOOP_MAX),
+        "episodic_life": bool(config.EPISODIC_LIFE),
     }
     if config.EPISODE_CUTOFF and config.EPISODE_CUTOFF > 0:
         kwargs["max_num_frames_per_episode"] = int(config.EPISODE_CUTOFF) * int(
