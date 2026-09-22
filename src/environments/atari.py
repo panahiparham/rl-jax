@@ -43,8 +43,14 @@ class AtariEnvLike:
             )
         self._num_envs = 1
         self._init_handle, self._reset_fn, self._step_fn = vector_env.xla()
-        frames, height, width = vector_env.single_observation_space.shape
-        self._obs_shape = (height, width, frames)  # channel-last
+        obs_shape = vector_env.single_observation_space.shape
+        self._colour = len(obs_shape) == 4
+        if self._colour:
+            frames, height, width, colours = obs_shape
+            self._obs_shape = (height, width, frames * colours)
+        else:
+            frames, height, width = obs_shape
+            self._obs_shape = (height, width, frames)  # channel-last
         self._n_actions = int(vector_env.single_action_space.n)
 
     def observation_space(self, params: object | None = None):
@@ -54,6 +60,11 @@ class AtariEnvLike:
         return _Discrete(self._n_actions)
 
     def _to_hwc(self, obs: jax.Array):
+        if self._colour:
+            # (1, frames, H, W, colours) -> (H, W, frames * colours), folding the
+            # frame stack and RGB channels into a single channel-last axis.
+            stacked = jnp.transpose(obs[0], (1, 2, 0, 3))
+            return stacked.reshape(self._obs_shape)
         return jnp.transpose(obs[0], (1, 2, 0))  # (1, frames, H, W) -> (H, W, frames)
 
     def reset(self, key: jax.Array, params: object | None = None):
