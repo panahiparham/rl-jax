@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from functools import cache
+
 import jax
 import jax.numpy as jnp
 import numpy as np
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 from components import ReplayBuffer, TimeStep, n_step_return, stored_transitions
 from environments import ENVIRONMENTS
@@ -12,6 +16,50 @@ from environments.catch import CatchConfig
 class _Space:
     shape = (1,)
     dtype = jnp.float32
+
+
+@st.composite
+def _reference_cases(draw: st.DrawFn):
+    capacity = draw(st.sampled_from([4, 5, 6]))
+    n_step = draw(st.integers(1, min(3, capacity - 1)))
+    num_adds = draw(st.integers(max(2, n_step + 1), capacity + 3))
+    flags = draw(
+        st.lists(
+            st.tuples(st.booleans(), st.booleans()),
+            min_size=num_adds,
+            max_size=num_adds,
+        )
+    )
+    rewards = draw(
+        st.lists(
+            st.integers(-3, 3),
+            min_size=num_adds,
+            max_size=num_adds,
+        )
+    )
+    return capacity, n_step, flags, rewards
+
+
+@cache
+def _compiled_sampler(capacity: int, n_step: int, batch_size: int):
+    buffer = ReplayBuffer(
+        capacity=capacity, batch_size=batch_size, n_step=n_step, gamma=0.9
+    )
+    return buffer, jax.jit(jax.vmap(buffer.sample, in_axes=(None, 0)))
+
+
+def _reference_sample(
+    transitions: list[tuple[int, int, int, bool, bool]], start: int, n_step: int
+):
+    window = transitions[start : start + n_step]
+    horizon = next((i + 1 for i, t in enumerate(window) if t[3] or t[4]), n_step)
+    last = window[horizon - 1]
+    return (
+        sum(0.9**i * t[2] for i, t in enumerate(window[:horizon])),
+        0.0 if last[3] else 0.9**horizon,
+        transitions[start + horizon][0],
+        not last[4],
+    )
 
 
 def _window(reward, termination, truncation, obs):
@@ -52,6 +100,61 @@ def test_n_step_return_runs_to_the_end_of_an_unbroken_window():
     np.testing.assert_allclose(np.asarray(discount), [0.729], rtol=1e-6)
     np.testing.assert_allclose(np.asarray(boot_obs), [[40.0]])
     np.testing.assert_array_equal(np.asarray(mask), [True])
+
+
+@settings(max_examples=12, deadline=None, derandomize=True)
+@given(case=_reference_cases())
+@example(
+    case=(
+        4,
+        2,
+        [(False, False)] * 3 + [(False, True), (True, False)] + [(False, False)] * 2,
+        list(range(1, 8)),
+    )
+)
+def test_sampled_batches_match_a_reference_buffer(
+    case: tuple[int, int, list[tuple[bool, bool]], list[int]],
+):
+    """Sampled rows match each legal reference window after ring wrap.
+
+    The sample keys must reach every retained start.
+    """
+    capacity, n_step, boundaries, rewards = case
+    batch_size = 2
+    buffer, sample = _compiled_sampler(capacity, n_step, batch_size)
+    state = buffer.init(_Space)
+    transitions = [
+        (i, i + 10, reward, *flags)
+        for i, (flags, reward) in enumerate(zip(boundaries, rewards, strict=True))
+    ]
+    for i, action, reward, terminated, truncated in transitions:
+        state = buffer.add(
+            state,
+            jnp.asarray([i], jnp.float32),
+            jnp.asarray(action, jnp.int32),
+            jnp.asarray(reward, jnp.float32),
+            jnp.asarray(terminated),
+            jnp.asarray(truncated),
+        )
+
+    assert bool(buffer.can_sample(state))
+    retained = transitions[-capacity:]
+    legal_starts = {t[0] for t in retained[: len(retained) - n_step]}
+    batch = jax.tree.map(
+        lambda value: np.asarray(value).reshape(-1),
+        sample(state, jax.random.split(jax.random.key(0), 32)),
+    )
+    sampled_starts = batch.obs.astype(int)
+    assert set(sampled_starts) == set(legal_starts)
+
+    for row, start_id in enumerate(sampled_starts):
+        retained_start = int(start_id - retained[0][0])
+        expected = _reference_sample(retained, retained_start, n_step)
+        assert batch.action[row] == retained[retained_start][1]
+        assert np.isclose(batch.ret[row], expected[0], rtol=1e-6)
+        assert np.isclose(batch.discount[row], expected[1], rtol=1e-6)
+        assert int(batch.boot_obs[row]) == expected[2]
+        assert bool(batch.mask[row]) is expected[3]
 
 
 def test_termination_cuts_the_window_and_zeroes_the_discount():
