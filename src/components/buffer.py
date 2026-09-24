@@ -55,6 +55,19 @@ def sample_windows(
     return ((starts[:, None] + offsets[None, :]) % capacity).astype(jnp.int32)
 
 
+def stack_frames(frames: jax.Array, first: jax.Array) -> jax.Array:
+    """Mask frames from prior episodes and concatenate channels chronologically."""
+    k_axis = first.ndim - 1
+    k_size = frames.shape[k_axis]
+    positions = jnp.arange(k_size)
+    last_start = jnp.max(jnp.where(first, positions, -1), axis=-1)
+    valid = positions >= last_start[..., None]
+    valid = valid.reshape(first.shape + (1,) * (frames.ndim - first.ndim))
+    frames = jnp.where(valid, frames, 0)
+    frames = jnp.moveaxis(frames, k_axis, -2)
+    return frames.reshape(frames.shape[:-2] + (k_size * frames.shape[-1],))
+
+
 def n_step_return(
     batch: TimeStep, gamma: float, n_step: int
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
