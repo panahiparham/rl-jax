@@ -12,7 +12,6 @@ import pytest
 
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
-from components import stored_transitions
 from environments.autoreset import AutoresetImmediate
 from main import interaction
 
@@ -71,7 +70,7 @@ def _run(agent_cls, config_cls, *, reward_clip: bool, steps: int = 6):
     env = _fake_env()
     run = jax.jit(lambda key: interaction(key, agent, env, steps))
     metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
-    return metrics, final_carry[1]
+    return agent, metrics, final_carry[1]
 
 
 @pytest.mark.parametrize("agent_cls,config_cls", AGENTS)
@@ -81,8 +80,8 @@ def test_reward_clip_defaults_to_disabled(agent_cls, config_cls):
 
 @pytest.mark.parametrize("agent_cls,config_cls", AGENTS)
 def test_buffer_stores_sign_clipped_reward(agent_cls, config_cls):
-    metrics, state = _run(agent_cls, config_cls, reward_clip=True)
-    stored = np.asarray(stored_transitions(state.buffer_state).reward)
+    agent, metrics, state = _run(agent_cls, config_cls, reward_clip=True)
+    stored = np.asarray(agent._buffer.stored_transitions(state.buffer_state).reward)
     raw = np.asarray(metrics["reward"])
     np.testing.assert_array_equal(stored, np.sign(raw))
     # the fake env's rewards span negative, zero, and >1-magnitude positive,
@@ -92,8 +91,8 @@ def test_buffer_stores_sign_clipped_reward(agent_cls, config_cls):
 
 @pytest.mark.parametrize("agent_cls,config_cls", AGENTS)
 def test_buffer_stores_raw_reward_when_disabled(agent_cls, config_cls):
-    metrics, state = _run(agent_cls, config_cls, reward_clip=False)
-    stored = np.asarray(stored_transitions(state.buffer_state).reward)
+    agent, metrics, state = _run(agent_cls, config_cls, reward_clip=False)
+    stored = np.asarray(agent._buffer.stored_transitions(state.buffer_state).reward)
     raw = np.asarray(metrics["reward"])
     np.testing.assert_array_equal(stored, raw)
 
@@ -102,8 +101,8 @@ def test_buffer_stores_raw_reward_when_disabled(agent_cls, config_cls):
 def test_recorded_metrics_are_never_clipped(agent_cls, config_cls):
     """The value reported to the caller matches the env's true reward,
     whether or not REWARD_CLIP is enabled for the agent's own buffer/update."""
-    clipped_metrics, _ = _run(agent_cls, config_cls, reward_clip=True)
-    unclipped_metrics, _ = _run(agent_cls, config_cls, reward_clip=False)
+    _, clipped_metrics, _ = _run(agent_cls, config_cls, reward_clip=True)
+    _, unclipped_metrics, _ = _run(agent_cls, config_cls, reward_clip=False)
     np.testing.assert_array_equal(
         np.asarray(clipped_metrics["reward"]), np.asarray(unclipped_metrics["reward"])
     )

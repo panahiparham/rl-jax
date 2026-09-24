@@ -43,7 +43,6 @@ import pytest
 
 from agents.dqn import DQNAgent, DQNConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
-from components import stored_transitions
 from environments.autoreset import AutoresetImmediate
 from environments.catch import CatchConfig
 from environments.catch import build as build_catch
@@ -141,15 +140,15 @@ def _run_agent(agent, env, *, total, buffer_size=64, **overrides):
         raise ValueError(agent)
     run = jax.jit(lambda key: interaction(key, built, env, total))
     _metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
-    return final_carry[1]
+    return built, final_carry[1]
 
 
-def _buffer(agent_state):
+def _buffer(agent, agent_state):
     """Flat per-transition arrays read from the trajectory buffer, in add
     order: ``{"obs", "next_obs", "reward", "termination", "truncation"}``
     (``next_obs`` is ``obs`` shifted by one index, so it is one shorter;
     every other field has length #adds)."""
-    ts = stored_transitions(agent_state.buffer_state)
+    ts = agent._buffer.stored_transitions(agent_state.buffer_state)
     obs = np.asarray(ts.obs).reshape(-1)
     return {
         "obs": obs,
@@ -320,7 +319,8 @@ def test_buffer_boundary_successor_is_the_next_episodes_first_obs(agent, mode):
     episode's first observation, and the flag is on the transition that earned
     it. The entry after a boundary starts the new episode for real."""
     env = AutoresetImmediate(FakeEnv(period=3, mode=mode))
-    buf = _buffer(_run_agent(agent, env, total=9))
+    built, agent_state = _run_agent(agent, env, total=9)
+    buf = _buffer(built, agent_state)
 
     flag = buf["termination" if mode == "terminated" else "truncation"]
     other = buf["truncation" if mode == "terminated" else "termination"]
@@ -340,7 +340,8 @@ def test_no_stored_transition_is_dead(agent):
     """Immediate autoreset spends no step replaying a boundary, so every stored
     transition carries a real action and this fake's reward of 1."""
     env = AutoresetImmediate(FakeEnv(period=3, mode="truncated"))
-    buf = _buffer(_run_agent(agent, env, total=10))
+    built, agent_state = _run_agent(agent, env, total=10)
+    buf = _buffer(built, agent_state)
     assert (buf["reward"] == 1.0).all()
     np.testing.assert_array_equal(
         np.flatnonzero(buf["termination"] | buf["truncation"]), [2, 5, 8]
@@ -382,8 +383,10 @@ def test_dqn_treats_termination_and_truncation_differently():
     trunc_env = AutoresetImmediate(FakeEnv(period=4, mode="truncated"))
 
     # sanity: the two runs really do differ only in the boundary flag
-    tb = _buffer(_run_agent("random_buffered", term_env, total=40))
-    ub = _buffer(_run_agent("random_buffered", trunc_env, total=40))
+    term_agent, term_state = _run_agent("random_buffered", term_env, total=40)
+    trunc_agent, trunc_state = _run_agent("random_buffered", trunc_env, total=40)
+    tb = _buffer(term_agent, term_state)
+    ub = _buffer(trunc_agent, trunc_state)
     np.testing.assert_array_equal(tb["obs"], ub["obs"])
     np.testing.assert_array_equal(tb["next_obs"], ub["next_obs"])
     assert tb["termination"].any() and not tb["truncation"].any()

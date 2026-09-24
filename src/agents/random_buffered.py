@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 from experiment.hypers import traced
 
-from components import build_buffer
+from components import BufferState, build_buffer
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -21,7 +21,7 @@ class RandomBufferConfig:
 
 class RandomBufferState(NamedTuple):
     action_dim: jax.Array
-    buffer_state: object
+    buffer_state: BufferState
 
 
 class RandomBufferAgent:

@@ -21,9 +21,12 @@ class AtariConfig:
 
 
 class _Box:
-    def __init__(self, shape: tuple[int, ...], dtype: Any):
+    def __init__(
+        self, shape: tuple[int, ...], dtype: Any, frame_channels: int | None = None
+    ):
         self.shape = shape
         self.dtype = dtype
+        self.frame_channels = frame_channels
 
 
 class _Discrete:
@@ -49,13 +52,15 @@ class AtariEnvLike:
         if self._colour:
             frames, height, width, colours = obs_shape
             self._obs_shape = (height, width, frames * colours)
+            self._frame_channels = colours
         else:
             frames, height, width = obs_shape
             self._obs_shape = (height, width, frames)  # channel-last
+            self._frame_channels = 1
         self._n_actions = int(vector_env.single_action_space.n)
 
     def observation_space(self, params: object | None = None):
-        return _Box(self._obs_shape, jnp.uint8)
+        return _Box(self._obs_shape, jnp.uint8, self._frame_channels)
 
     def action_space(self, params: object | None = None):
         return _Discrete(self._n_actions)
