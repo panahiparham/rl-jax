@@ -9,6 +9,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from components import ReplayBuffer, TimeStep, n_step_return, stored_transitions
+from components.buffer import sample_windows
 from environments import ENVIRONMENTS
 from environments.catch import CatchConfig
 
@@ -40,12 +41,31 @@ def _reference_cases(draw: st.DrawFn):
     return capacity, n_step, flags, rewards
 
 
+@st.composite
+def _window_cases(draw: st.DrawFn):
+    lookback = draw(st.integers(0, 3))
+    lookahead = draw(st.integers(1, 3))
+    capacity = draw(st.integers(lookback + lookahead + 1, 8))
+    head = draw(st.integers(0, capacity - 1))
+    if capacity == lookahead + 1 or draw(st.booleans()):
+        size = capacity
+    else:
+        size = draw(st.integers(lookahead + 1, capacity - 1))
+    return capacity, lookback, lookahead, head, size
+
+
 @cache
 def _compiled_sampler(capacity: int, n_step: int, batch_size: int):
     buffer = ReplayBuffer(
         capacity=capacity, batch_size=batch_size, n_step=n_step, gamma=0.9
     )
     return buffer, jax.jit(jax.vmap(buffer.sample, in_axes=(None, 0)))
+
+
+_jit_sample_windows = jax.jit(
+    sample_windows,
+    static_argnames=("capacity", "lookback", "lookahead", "batch_size"),
+)
 
 
 def _reference_sample(
@@ -155,6 +175,52 @@ def test_sampled_batches_match_a_reference_buffer(
         assert np.isclose(batch.discount[row], expected[1], rtol=1e-6)
         assert int(batch.boot_obs[row]) == expected[2]
         assert bool(batch.mask[row]) is expected[3]
+
+
+@settings(max_examples=8, deadline=None, derandomize=True)
+@given(case=_window_cases())
+@example(case=(6, 1, 2, 0, 6))
+@example(case=(7, 2, 2, 3, 7))
+@example(case=(6, 2, 2, 4, 4))
+@example(case=(4, 1, 2, 2, 4))
+def test_sample_windows_cover_legal_starts(case: tuple[int, int, int, int, int]):
+    """Check sampled windows are consecutive and cover legal starts."""
+    capacity, lookback, lookahead, head, size = case
+    batch_size = 128
+    indices = np.asarray(
+        _jit_sample_windows(
+            jax.random.key(0),
+            jnp.asarray(head, jnp.int32),
+            jnp.asarray(size, jnp.int32),
+            capacity,
+            lookback,
+            lookahead,
+            batch_size,
+        )
+    )
+
+    assert indices.shape == (batch_size, lookback + lookahead + 1)
+    assert indices.dtype == np.int32
+    oldest = (head - size) % capacity
+    positions = (indices - oldest) % capacity
+    start_positions = positions[:, lookback]
+    before_start = positions[:, :lookback]
+    before_start = np.where(
+        before_start > start_positions[:, None],
+        before_start - capacity,
+        before_start,
+    )
+    ordered_positions = np.concatenate(
+        (before_start, positions[:, lookback:]), axis=1
+    )
+
+    assert np.all(np.diff(ordered_positions, axis=1) == 1)
+    assert np.all(positions[:, lookback:] < size)
+    if size == capacity:
+        assert np.all(ordered_positions >= 0)
+
+    expected_starts = size - (lookback if size == capacity else 0) - lookahead
+    assert len(set(start_positions.tolist())) == expected_starts
 
 
 def test_termination_cuts_the_window_and_zeroes_the_discount():
