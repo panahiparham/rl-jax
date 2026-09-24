@@ -102,6 +102,7 @@ def test_spaces_and_dtype():
     env = AtariEnvLike(_FakeVectorEnv(n=6))
     assert env.observation_space().shape == (84, 84, 4)
     assert env.observation_space().dtype == jnp.uint8
+    assert env.observation_space().frame_channels == 1
     assert env.action_space().n == 6
     # no env in this repo auto-resets; the agent does
     assert not hasattr(env, "auto_resets")
@@ -204,6 +205,7 @@ def test_rgb_spaces_fold_frames_and_colours():
     env = AtariEnvLike(_FakeVectorEnv(frames=4, h=210, w=160, colours=3))
     assert env.observation_space().shape == (210, 160, 12)
     assert env.observation_space().dtype == jnp.uint8
+    assert env.observation_space().frame_channels == 3
 
 
 def test_rgb_reset_and_step_shapes():
