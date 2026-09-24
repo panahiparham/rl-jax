@@ -53,6 +53,7 @@ extend-select = ["A", "B", "BLE", "C4", "DTZ", "I", "N", "PLC0415", "S", "SIM", 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S603", "S607", "S608"]
 "benchmarks/core/**" = ["S603", "S607"]
+"microbenchmarks/**" = ["S101"]
 "src/environments/atari.py" = ["PLC0415"]
 "tests/test_atari.py" = ["PLC0415"]
 "benchmarks/core/plot.py" = ["I001"]
