@@ -29,6 +29,27 @@ def build_buffer(name: str, **kwargs):
         raise ValueError(f"unknown buffer {name!r}")
 
 
+def sample_windows(
+    key: jax.Array,
+    head: jax.Array,
+    size: jax.Array,
+    capacity: int,
+    lookback: int,
+    lookahead: int,
+    batch_size: int,
+) -> jax.Array:
+    """Sample uniformly from valid starts in the retained chronological range."""
+    # Before full, episode-start padding covers lookback before the oldest slot.
+    skip = jnp.where(size == capacity, lookback, 0)
+    oldest = (head - size) % capacity
+    count = size - skip - lookahead
+    starts = (
+        oldest + skip + jax.random.randint(key, (batch_size,), 0, count)
+    ) % capacity
+    offsets = jnp.arange(-lookback, lookahead + 1, dtype=jnp.int32)
+    return ((starts[:, None] + offsets[None, :]) % capacity).astype(jnp.int32)
+
+
 def n_step_return(
     batch: TimeStep, gamma: float, n_step: int
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
