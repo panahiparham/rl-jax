@@ -9,9 +9,9 @@ import jax.numpy as jnp
 @dataclass(frozen=True)
 class AtariConfig: # revisiting ALE recommendations
     GAME: str = "pong"
-    FRAMESKIP: int = 5
+    FRAMESKIP: int = 4
     STICKY_ACTIONS: float = 0.25
-    EPISODE_CUTOFF: int = 18_000
+    MAX_FRAMES_PER_EPISODE: int = 18_000
     IMG_HEIGHT: int = 84
     IMG_WIDTH: int = 84
     GRAYSCALE: bool = True
@@ -23,6 +23,25 @@ class AtariConfig: # revisiting ALE recommendations
     USE_FIRE_RESET: bool = False
     LIFE_LOSS_INFO: bool = False
     REWARD_CLIPPING: bool = False
+
+@dataclass(frozen=True)
+class ClassicAtariConfig(AtariConfig): # Original DQN settings (DQN Zoo)
+    STICKY_ACTIONS: float = 0.0
+    MAX_FRAMES_PER_EPISODE: int = 108_000
+    LIMITED_ACTION_SPACE: bool = True
+    NOOP_MAX: int = 31
+    LIFE_LOSS_INFO: bool = True
+
+@dataclass(frozen=True)
+class DopamineAtariConfig(AtariConfig): # Dopamine baselines settings
+    MAX_FRAMES_PER_EPISODE: int = 100_000
+    LIMITED_ACTION_SPACE: bool = True
+
+@dataclass(frozen=True)
+class EPRAtariConfig(AtariConfig): # Endpoint replay settings
+    MAX_FRAMES_PER_EPISODE: int = 108_000
+    LIMITED_ACTION_SPACE: bool = True
+    LIFE_LOSS_INFO: bool = True
 
 
 class _Box:
@@ -180,6 +199,7 @@ def build(config: AtariConfig):
     kwargs = {
         "game": config.GAME,
         "num_envs": 1,
+        "max_num_frames_per_episode": int(config.MAX_FRAMES_PER_EPISODE),
         "frameskip": int(config.FRAMESKIP),
         "repeat_action_probability": float(config.STICKY_ACTIONS),
         "img_height": int(config.IMG_HEIGHT),
@@ -194,9 +214,4 @@ def build(config: AtariConfig):
         "life_loss_info": bool(config.LIFE_LOSS_INFO),
         "reward_clipping": bool(config.REWARD_CLIPPING),
     }
-    if config.EPISODE_CUTOFF and config.EPISODE_CUTOFF > 0:
-        kwargs["max_num_frames_per_episode"] = int(config.EPISODE_CUTOFF) * int(
-            config.FRAMESKIP
-        )
-
     return AtariEnv(AtariEnvLike(ale_py.AtariVectorEnv(**kwargs)))
