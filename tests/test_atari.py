@@ -19,6 +19,7 @@ import pytest
 
 from agents.dqn import DQNAgent, DQNConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
+from components import ReplayBuffer
 from environments import ENVIRONMENTS
 from environments.atari import AtariConfig, AtariEnv, AtariEnvLike
 from environments.autoreset import AutoresetImmediate
@@ -344,6 +345,42 @@ def _ale_xla_available() -> bool:
 ale_only = pytest.mark.skipif(
     not _ale_xla_available(), reason="ale-py XLA build not installed"
 )
+
+
+@ale_only
+@pytest.mark.parametrize("grayscale", [True, False])
+def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
+    """Frame replay relies on ale restarting each stack zero-padded after every
+    termination - including a lost life under episodic life - and otherwise
+    rolling by one frame, so the buffer reproduces every observation."""
+    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="breakout", GRAYSCALE=grayscale))
+    channels = env.observation_space().frame_channels
+    buffer = ReplayBuffer(capacity=128, batch_size=2, n_step=1, gamma=0.99)
+    buffer_state = buffer.init(env.observation_space())
+    step = jax.jit(env.step)
+    env_state, obs = env.init(jax.random.key(0))
+    assert not np.asarray(obs)[..., :-channels].any()
+
+    logged, boundaries = [], 0
+    for t in range(100):
+        action = jnp.int32(t % env.action_space().n)
+        env_state, reward, term, trunc, next_obs = step(
+            env_state, jax.random.key(t), action
+        )
+        buffer_state = buffer.add(buffer_state, obs, action, reward, term, trunc)
+        logged.append(np.asarray(obs))
+        older = np.asarray(next_obs)[..., :-channels]
+        if bool(term | trunc):
+            boundaries += 1
+            assert not older.any()
+        else:
+            np.testing.assert_array_equal(older, np.asarray(obs)[..., channels:])
+        obs = next_obs
+
+    assert boundaries >= 2  # breakout loses lives quickly under these actions
+    np.testing.assert_array_equal(
+        np.asarray(buffer.stored_transitions(buffer_state).obs), np.stack(logged)
+    )
 
 
 @ale_only
