@@ -10,7 +10,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from components import ReplayBuffer, TimeStep, n_step_return, stored_transitions
-from components.buffer import sample_windows
+from components.buffer import sample_windows, stack_frames
 from environments import ENVIRONMENTS
 from environments.catch import CatchConfig
 
@@ -222,6 +222,66 @@ def test_sample_windows_cover_legal_starts(case: tuple[int, int, int, int, int])
 
     expected_starts = size - (lookback if size == capacity else 0) - lookahead
     assert len(set(start_positions.tolist())) == expected_starts
+
+
+def test_stack_frames_preserves_rgb_layout_and_start_at_zero():
+    """Preserve RGB layout and leave a start at position zero unchanged."""
+    frames = np.arange(4 * 2 * 3 * 3, dtype=np.uint8).reshape(4, 2, 3, 3)
+    expected = np.concatenate([frames[i] for i in range(4)], axis=-1)
+
+    for first in (np.zeros(4, dtype=bool), np.array([True, False, False, False])):
+        stacked = stack_frames(jnp.asarray(frames), jnp.asarray(first))
+        np.testing.assert_array_equal(np.asarray(stacked), expected)
+
+
+@pytest.mark.parametrize(
+    ("first", "last_start"),
+    [([False, False, True, False], 2), ([False, True, False, True], 3)],
+)
+def test_stack_frames_zeroes_frames_before_the_last_start(
+    first: list[bool], last_start: int
+):
+    """Zero frames preceding the latest episode start."""
+    frames = np.arange(4 * 2 * 3 * 3, dtype=np.uint8).reshape(4, 2, 3, 3)
+    expected_frames = [
+        np.zeros_like(frame) if i < last_start else frame
+        for i, frame in enumerate(frames)
+    ]
+    expected = np.concatenate(expected_frames, axis=-1)
+
+    stacked = stack_frames(jnp.asarray(frames), jnp.asarray(first))
+
+    np.testing.assert_array_equal(np.asarray(stacked), expected)
+
+
+@pytest.mark.parametrize("frame_shape", [(2, 3, 3), (5,)])
+def test_stack_frames_with_one_frame_returns_that_frame(
+    frame_shape: tuple[int, ...],
+):
+    """Remove a singleton frame axis for images and vectors."""
+    frame = np.arange(np.prod(frame_shape), dtype=np.uint8).reshape(frame_shape)
+    result = stack_frames(jnp.asarray(frame[None]), jnp.asarray([True]))
+
+    np.testing.assert_array_equal(np.asarray(result), frame)
+
+
+def test_stack_frames_handles_leading_batch_dims_independently():
+    """Pad each batch row using its own latest episode start."""
+    frames = np.arange(2 * 4 * 2 * 2 * 3, dtype=np.uint8).reshape(2, 4, 2, 2, 3)
+    first = np.array(
+        [[False, False, True, False], [False, True, False, True]], dtype=bool
+    )
+    zero = np.zeros_like(frames[0, 0])
+    expected = np.stack(
+        [
+            np.concatenate((zero, zero, frames[0, 2], frames[0, 3]), axis=-1),
+            np.concatenate((zero, zero, zero, frames[1, 3]), axis=-1),
+        ]
+    )
+
+    stacked = stack_frames(jnp.asarray(frames), jnp.asarray(first))
+
+    np.testing.assert_array_equal(np.asarray(stacked), expected)
 
 
 def test_termination_cuts_the_window_and_zeroes_the_discount():
