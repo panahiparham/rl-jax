@@ -22,11 +22,7 @@ class AtariConfig:
     MAXPOOL: bool = True
     USE_FIRE_RESET: bool = True
     LIFE_LOSS_INFO: bool = False
-    # ale clips by default; the agent's REWARD_CLIP owns clipping, so the
-    # reward reaching the caller stays the game's own score.
     REWARD_CLIPPING: bool = False
-    NUM_THREADS: int = 0
-    THREAD_AFFINITY_OFFSET: int = -1
 
 
 class _Box:
@@ -197,8 +193,6 @@ def build(config: AtariConfig):
         "use_fire_reset": bool(config.USE_FIRE_RESET),
         "life_loss_info": bool(config.LIFE_LOSS_INFO),
         "reward_clipping": bool(config.REWARD_CLIPPING),
-        "num_threads": int(config.NUM_THREADS),
-        "thread_affinity_offset": int(config.THREAD_AFFINITY_OFFSET),
     }
     if config.EPISODE_CUTOFF and config.EPISODE_CUTOFF > 0:
         kwargs["max_num_frames_per_episode"] = int(config.EPISODE_CUTOFF) * int(
