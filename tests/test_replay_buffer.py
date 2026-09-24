@@ -474,6 +474,36 @@ def test_termination_cuts_the_window_and_zeroes_the_discount():
     np.testing.assert_array_equal(np.asarray(mask), [True])
 
 
+def test_zero_step_discount_ends_the_return_without_cutting_the_window():
+    """A non-terminal zero discount, such as a lost life, drops every later
+    reward and the bootstrap but leaves the window and its mask intact."""
+    batch = _window(
+        [1.0, 2.0, 3.0, 0.0],
+        [False] * 4,
+        [False] * 4,
+        [[10.0], [20.0], [30.0], [40.0]],
+    )._replace(discount=jnp.array([[1.0, 0.0, 1.0, 1.0]]))
+    ret, discount, horizon, mask = n_step_return(batch, 0.9, 3)
+    np.testing.assert_allclose(np.asarray(ret), [2.8], rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(discount), [0.0])
+    np.testing.assert_array_equal(np.asarray(horizon), [3])
+    np.testing.assert_array_equal(np.asarray(mask), [True])
+
+
+def test_step_discounts_compound_with_gamma():
+    """Each reward and the bootstrap are scaled by the step discounts before
+    them, on top of ``gamma``."""
+    batch = _window(
+        [1.0, 2.0, 3.0, 0.0],
+        [False] * 4,
+        [False] * 4,
+        [[10.0], [20.0], [30.0], [40.0]],
+    )._replace(discount=jnp.array([[0.5, 1.0, 1.0, 1.0]]))
+    ret, discount, _horizon, _mask = n_step_return(batch, 0.9, 3)
+    np.testing.assert_allclose(np.asarray(ret), [3.115], rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(discount), [0.3645], rtol=1e-6)
+
+
 def test_truncation_cuts_the_window_and_clears_the_mask():
     batch = _window(
         [1.0, 2.0, 3.0, 0.0],
