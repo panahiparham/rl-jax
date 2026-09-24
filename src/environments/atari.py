@@ -156,7 +156,8 @@ class AtariEnv:
             lambda carry: carry,
             (stepped, obs),
         )
-        return next_state, reward, termination, truncation, next_obs
+        discount = 1.0 - termination.astype(jnp.float32)
+        return next_state, reward, termination, truncation, discount, next_obs
 
 
 def require_ale_xla(game: str):

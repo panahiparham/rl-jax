@@ -156,7 +156,7 @@ def test_immediate_autoreset_returns_the_fresh_obs_on_the_boundary():
     state, _obs = env.init(jax.random.key(0))
     seen = []
     for i in range(7):
-        state, reward, term, trunc, obs = env.step(
+        state, reward, term, trunc, _discount, obs = env.step(
             state, jax.random.key(i), jnp.int32(0)
         )
         seen.append((int(obs[0, 0, -1]), float(reward), bool(term), bool(trunc)))
@@ -177,7 +177,9 @@ def test_no_dead_step_reaches_the_caller():
     state, _obs = env.init(jax.random.key(0))
     rewards = []
     for i in range(6):
-        state, reward, _te, _tr, _obs = env.step(state, jax.random.key(i), jnp.int32(0))
+        state, reward, _te, _tr, _discount, _obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
         rewards.append(float(reward))
     assert rewards == [1.0] * 6
 
@@ -188,7 +190,9 @@ def test_non_boundary_step_does_not_double_step_the_emulator():
     env = AtariEnv(AtariEnvLike(_FakeVectorEnv(period=10)))
     state, _obs = env.init(jax.random.key(0))
     for i in range(3):
-        state, _r, _te, _tr, obs = env.step(state, jax.random.key(i), jnp.int32(0))
+        state, _r, _te, _tr, _discount, obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
     assert int(obs[0, 0, -1]) == 3
 
 
@@ -198,7 +202,7 @@ def test_immediate_autoreset_under_jit():
     @jax.jit
     def rollout(state, keys):
         def one(st, k):
-            st, r, term, trunc, obs = env.step(st, k, jnp.int32(0))
+            st, r, term, trunc, _discount, obs = env.step(st, k, jnp.int32(0))
             return st, (obs[0, 0, -1], r, term, trunc)
 
         return jax.lax.scan(one, state, keys)
@@ -365,11 +369,11 @@ def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
     logged, boundaries = [], 0
     for t in range(100):
         action = jnp.int32(t % env.action_space().n)
-        env_state, reward, term, trunc, next_obs = step(
+        env_state, reward, term, trunc, discount, next_obs = step(
             env_state, jax.random.key(t), action
         )
         buffer_state = buffer.add(
-            buffer_state, obs, action, reward, term, trunc, 1.0 - term
+            buffer_state, obs, action, reward, term, trunc, discount
         )
         logged.append(np.asarray(obs))
         older = np.asarray(next_obs)[..., :-channels]
@@ -400,7 +404,9 @@ def test_atari_real_immediate_autoreset_cutoff():
     rows = []
     for n in range(1, 2 * cutoff + 3):
         action = jnp.int32(n % 6)
-        state, r, term, trunc, _obs = env.step(state, jax.random.key(n), action)
+        state, r, term, trunc, _discount, _obs = env.step(
+            state, jax.random.key(n), action
+        )
         rows.append((float(r), bool(term), bool(trunc)))
 
     trunc_steps = [i + 1 for i, (_r, t, tr) in enumerate(rows) if tr]
@@ -446,7 +452,7 @@ def test_atari_env_real_jit_scan():
     @jax.jit
     def rollout(state, keys):
         def one(st, k):
-            st, reward, _tm, _tr, _o = env.step(st, k, jnp.int32(0))
+            st, reward, _tm, _tr, _discount, _o = env.step(st, k, jnp.int32(0))
             return st, reward
 
         return jax.lax.scan(one, state, keys)

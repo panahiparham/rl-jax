@@ -537,11 +537,11 @@ def test_buffer_fills_and_samples_from_a_real_env_under_jit():
             key, env_state, obs, buffer_state = carry
             act_key, env_key, key = jax.random.split(key, 3)
             action = jax.random.randint(act_key, (), 0, 3, dtype=jnp.int32)
-            env_state, reward, term, trunc, next_obs = env.step(
+            env_state, reward, term, trunc, discount, next_obs = env.step(
                 env_state, env_key, action
             )
             buffer_state = buffer.add(
-                buffer_state, obs, action, reward, term, trunc, 1.0 - term
+                buffer_state, obs, action, reward, term, trunc, discount
             )
             return (key, env_state, next_obs, buffer_state), trunc
 

@@ -57,6 +57,7 @@ class RandomBufferAgent:
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
+        discount: jax.Array,
     ):
         del key
         buffer_state = self._buffer.add(
@@ -66,7 +67,7 @@ class RandomBufferAgent:
             reward,
             termination,
             truncation,
-            1.0 - termination.astype(jnp.float32),
+            discount,
         )
         return state._replace(buffer_state=buffer_state)
 

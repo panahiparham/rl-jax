@@ -140,6 +140,7 @@ class DQNAgent:
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
+        discount: jax.Array,
     ):
         config = self._config
         if config.REWARD_CLIP:
@@ -151,7 +152,7 @@ class DQNAgent:
             reward,
             termination,
             truncation,
-            1.0 - termination.astype(jnp.float32),
+            discount,
         )
         state = state._replace(buffer_state=buffer_state)
 

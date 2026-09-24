@@ -29,7 +29,7 @@ def test_init_and_step_shapes():
     env = ENVIRONMENTS["catch"].build(CatchConfig())
     state, obs = env.init(jax.random.key(0))
     assert obs.shape == (10, 5) and obs.dtype == jnp.float32
-    _state2, reward, termination, truncation, next_obs = env.step(
+    _state2, reward, termination, truncation, _discount, next_obs = env.step(
         state, jax.random.key(1), jnp.int32(1)
     )
     assert next_obs.shape == (10, 5)
@@ -44,7 +44,9 @@ def test_episode_cutoff_truncates_not_terminates():
     state, _obs = env.init(jax.random.key(0))
     flags = []
     for n in range(5):
-        state, _r, term, trunc, _obs = env.step(state, jax.random.key(n), jnp.int32(1))
+        state, _r, term, trunc, _discount, _obs = env.step(
+            state, jax.random.key(n), jnp.int32(1)
+        )
         flags.append((bool(term), bool(trunc)))
     assert flags == [(False, False)] * 4 + [(False, True)]
 
