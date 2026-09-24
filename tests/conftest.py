@@ -25,6 +25,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import jax
 import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -44,6 +45,14 @@ from experiment.results import _connect_write, _ensure_table
 from experiment.slurm import _remote_dir
 
 _REMOTE_DIR = _remote_dir()
+
+
+def pytest_configure(config: pytest.Config):
+    # Reruns and xdist workers reuse compiles of unchanged programs.
+    cache_dir = config.cache.mkdir("jax")
+    jax.config.update("jax_compilation_cache_dir", str(cache_dir))
+    jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
 
 # A minimal experiment: enough for plan/consolidate/sync and for --slurm dispatch, with
 # no jax in the loop (the cluster side never actually executes, sbatch is a stub).
