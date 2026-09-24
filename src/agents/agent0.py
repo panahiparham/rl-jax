@@ -9,6 +9,7 @@ import optax
 from experiment.hypers import traced
 
 from components import (
+    BufferState,
     NatureCNN,
     NatureCNNLN,
     QNetwork,
@@ -52,7 +53,7 @@ class Agent0Config:
 class Agent0State(NamedTuple):
     q: eqx.Module
     opt_state: Any
-    buffer_state: object
+    buffer_state: BufferState
     t: jax.Array
 
 

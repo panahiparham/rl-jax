@@ -2,6 +2,7 @@
 
 from components.buffer import (
     Batch,
+    BufferState,
     ReplayBuffer,
     TimeStep,
     build_buffer,
@@ -13,6 +14,7 @@ from components.policy import epsilon_greedy_action
 
 __all__ = [
     "Batch",
+    "BufferState",
     "NatureCNN",
     "NatureCNNLN",
     "QNetwork",

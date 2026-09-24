@@ -5,6 +5,7 @@ from functools import cache
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
@@ -280,6 +281,12 @@ def test_can_sample_is_false_before_the_buffer_fills():
     assert bool(buffer.can_sample(_fill(buffer, [1.0] * 9, [False] * 9, [False] * 9)))
 
 
+def test_replay_buffer_requires_capacity_for_one_full_window():
+    """Reject capacities too small for an n-step window."""
+    with pytest.raises(ValueError, match=r"capacity must be at least n_step \+ 1"):
+        ReplayBuffer(capacity=3, batch_size=1, n_step=3, gamma=0.9)
+
+
 def test_buffer_fills_and_samples_from_a_real_env_under_jit():
     """End to end: a jitted rollout of catch fills the buffer, and the
     episode cutoff shows up as truncation-masked windows in the sample."""
@@ -335,4 +342,4 @@ def test_stored_transitions_after_wrap_returns_full_capacity_oldest_first():
     np.testing.assert_array_equal(
         np.asarray(result.obs).reshape(-1), [2.0, 3.0, 4.0, 5.0]
     )
-    assert bool(state.is_full)
+    assert int(state.size) == 4

@@ -1,6 +1,5 @@
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
-import flashbax as fbx
 import jax
 import jax.numpy as jnp
 
@@ -20,6 +19,12 @@ class Batch(NamedTuple):
     discount: jax.Array
     boot_obs: jax.Array
     mask: jax.Array
+
+
+class BufferState(NamedTuple):
+    data: TimeStep
+    head: jax.Array
+    size: jax.Array
 
 
 def build_buffer(name: str, **kwargs):
@@ -77,64 +82,71 @@ def n_step_return(
     return ret, discount, n, ~trunc_cut
 
 
-def stored_transitions(state: Any) -> TimeStep:
+def stored_transitions(state: BufferState) -> TimeStep:
     """Return all stored transitions in add order, oldest first.
 
     Once the buffer wraps, this includes the entire capacity.
     """
-    n = int(state.current_index)
-    stored = jax.tree.map(lambda x: x[0], state.experience)
-    if bool(state.is_full):
-        return jax.tree.map(lambda x: jnp.roll(x, -n, axis=0), stored)
-    return jax.tree.map(lambda x: x[:n], stored)
+    size = int(state.size)
+    capacity = state.data.obs.shape[0]
+    oldest = (int(state.head) - size) % capacity
+    indices = (oldest + jnp.arange(size)) % capacity
+    return jax.tree.map(lambda x: x[indices], state.data)
 
 
 class ReplayBuffer:
     def __init__(self, *, capacity: int, batch_size: int, n_step: int, gamma: float):
+        if capacity < n_step + 1:
+            raise ValueError("capacity must be at least n_step + 1")
+        self._capacity = capacity
+        self._batch_size = batch_size
         self._n_step = n_step
         self._gamma = gamma
-        self._buffer = fbx.make_trajectory_buffer(
-            add_batch_size=1,
-            sample_batch_size=batch_size,
-            sample_sequence_length=n_step + 1,
-            period=1,
-            min_length_time_axis=max(batch_size, n_step + 1),
-            max_length_time_axis=capacity,
-        )
 
-    def init(self, observation_space):
-        return self._buffer.init(
-            TimeStep(
-                obs=jnp.zeros(observation_space.shape, observation_space.dtype),
-                action=jnp.asarray(0, jnp.int32),
-                reward=jnp.asarray(0.0, jnp.float32),
-                termination=jnp.asarray(False),
-                truncation=jnp.asarray(False),
-            )
+    def init(self, observation_space) -> BufferState:
+        return BufferState(
+            data=TimeStep(
+                obs=jnp.zeros(
+                    (self._capacity, *observation_space.shape), observation_space.dtype
+                ),
+                action=jnp.zeros((self._capacity,), jnp.int32),
+                reward=jnp.zeros((self._capacity,), jnp.float32),
+                termination=jnp.zeros((self._capacity,), jnp.bool_),
+                truncation=jnp.zeros((self._capacity,), jnp.bool_),
+            ),
+            head=jnp.asarray(0, jnp.int32),
+            size=jnp.asarray(0, jnp.int32),
         )
 
     def add(
         self,
-        state: Any,
+        state: BufferState,
         obs: jax.Array,
         action: jax.Array,
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
-    ):
-        timestep = TimeStep(
-            obs=obs,
-            action=action,
-            reward=reward,
-            termination=termination,
-            truncation=truncation,
-        )
-        return self._buffer.add(
-            state, jax.tree.map(lambda x: x[None, None, ...], timestep)
+    ) -> BufferState:
+        data = TimeStep(obs, action, reward, termination, truncation)
+        return BufferState(
+            data=jax.tree.map(
+                lambda buf, value: buf.at[state.head].set(value), state.data, data
+            ),
+            head=(state.head + 1) % self._capacity,
+            size=jnp.minimum(state.size + 1, self._capacity),
         )
 
-    def sample(self, state: Any, key: jax.Array):
-        window = self._buffer.sample(state, key).experience
+    def sample(self, state: BufferState, key: jax.Array) -> Batch:
+        indices = sample_windows(
+            key,
+            state.head,
+            state.size,
+            self._capacity,
+            0,
+            self._n_step,
+            self._batch_size,
+        )
+        window = jax.tree.map(lambda x: x[indices], state.data)
         ret, discount, horizon, mask = n_step_return(
             window, self._gamma, self._n_step
         )
@@ -149,5 +161,5 @@ class ReplayBuffer:
             mask=mask,
         )
 
-    def can_sample(self, state: Any) -> jax.Array:
-        return self._buffer.can_sample(state)
+    def can_sample(self, state: BufferState) -> jax.Array:
+        return state.size >= max(self._batch_size, self._n_step + 1)
