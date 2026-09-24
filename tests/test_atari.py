@@ -293,6 +293,73 @@ def test_boundary_transition_successor_is_the_fresh_frame(agent_name):
     np.testing.assert_array_equal(obs[ends], [cutoff - 1, cutoff - 1])
 
 
+# --- life loss (fake env) ----------------------------------------------------
+
+
+def _discounts_and_flags(env: AtariEnv, steps: int):
+    state, _obs = env.init(jax.random.key(0))
+    rows = []
+    for i in range(steps):
+        state, _r, term, _trunc, discount, obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
+        rows.append((float(discount), bool(term), int(obs[0, 0, -1])))
+    return rows
+
+
+def test_life_loss_zeroes_the_discount_without_ending_the_episode():
+    """A lost life stops the bootstrap, but the game plays on: the episode does
+    not terminate and the frame counter keeps counting instead of resetting."""
+    inner = AtariEnvLike(_FakeVectorEnv(period=10, life_period=3))
+    env = AtariEnv(inner, zero_discount_on_life_loss=True)
+
+    rows = _discounts_and_flags(env, 9)
+
+    assert [d for d, _t, _o in rows] == [1.0, 1.0, 0.0] * 3
+    assert not any(t for _d, t, _o in rows)
+    assert [o for _d, _t, o in rows] == list(range(1, 10))
+
+
+def test_life_loss_keeps_the_discount_when_disabled():
+    """Without the option a lost life is an ordinary step."""
+    env = AtariEnv(AtariEnvLike(_FakeVectorEnv(period=10, life_period=3)))
+
+    rows = _discounts_and_flags(env, 9)
+
+    assert [d for d, _t, _o in rows] == [1.0] * 9
+
+
+@pytest.mark.parametrize("zero_discount_on_life_loss", [True, False])
+def test_termination_zeroes_the_discount(zero_discount_on_life_loss):
+    """Game over always stops the bootstrap, whatever the life-loss option."""
+    inner = AtariEnvLike(_FakeVectorEnv(period=3))
+    env = AtariEnv(inner, zero_discount_on_life_loss=zero_discount_on_life_loss)
+
+    rows = _discounts_and_flags(env, 6)
+
+    assert [(d, t) for d, t, _o in rows] == [
+        (1.0, False),
+        (1.0, False),
+        (0.0, True),
+    ] * 2
+
+
+def test_a_new_episode_restores_lives_without_a_life_loss():
+    """The reset after game over refills the lives, which must not read as a
+    life lost or gained on the new episode's first step."""
+    inner = AtariEnvLike(_FakeVectorEnv(period=4, life_period=2))
+    env = AtariEnv(inner, zero_discount_on_life_loss=True)
+
+    rows = _discounts_and_flags(env, 8)
+
+    assert [(d, t) for d, t, _o in rows] == [
+        (1.0, False),
+        (0.0, False),
+        (1.0, False),
+        (0.0, True),
+    ] * 2
+
+
 # --- DQN on image obs in jit (fake env; reliable, no ale-py) -----------------
 
 
