@@ -34,10 +34,12 @@ dev = [
     "ruff>=0.16",
     "mypy>=2.3",
     "hypothesis>=6.168.1",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-n auto"
 
 [tool.ruff]
 target-version = "py313"
