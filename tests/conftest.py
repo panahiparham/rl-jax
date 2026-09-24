@@ -30,6 +30,16 @@ import pytest
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 
+# Git exports these to hooks and `rebase --exec`; inherited, they would point
+# the sandboxes' git commands at the caller's repository instead.
+for _var in subprocess.run(
+    ["git", "rev-parse", "--local-env-vars"],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.split():
+    os.environ.pop(_var, None)
+
 from experiment.results import _connect_write, _ensure_table
 from experiment.slurm import _remote_dir
 
