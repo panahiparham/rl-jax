@@ -95,10 +95,10 @@ def test_n_step_return_runs_to_the_end_of_an_unbroken_window():
         [False] * 4,
         [[10.0], [20.0], [30.0], [40.0]],
     )
-    ret, discount, boot_obs, mask = n_step_return(batch, 0.9, 3)
+    ret, discount, horizon, mask = n_step_return(batch, 0.9, 3)
     np.testing.assert_allclose(np.asarray(ret), [5.23], rtol=1e-6)
     np.testing.assert_allclose(np.asarray(discount), [0.729], rtol=1e-6)
-    np.testing.assert_allclose(np.asarray(boot_obs), [[40.0]])
+    np.testing.assert_array_equal(np.asarray(horizon), [3])
     np.testing.assert_array_equal(np.asarray(mask), [True])
 
 
@@ -164,10 +164,10 @@ def test_termination_cuts_the_window_and_zeroes_the_discount():
         [False] * 4,
         [[10.0], [20.0], [30.0], [40.0]],
     )
-    ret, discount, boot_obs, mask = n_step_return(batch, 0.9, 3)
+    ret, discount, horizon, mask = n_step_return(batch, 0.9, 3)
     np.testing.assert_allclose(np.asarray(ret), [2.8], rtol=1e-6)
     np.testing.assert_allclose(np.asarray(discount), [0.0])
-    np.testing.assert_allclose(np.asarray(boot_obs), [[30.0]])
+    np.testing.assert_array_equal(np.asarray(horizon), [2])
     # a terminal window still trains: the discount alone removes the bootstrap
     np.testing.assert_array_equal(np.asarray(mask), [True])
 
@@ -179,11 +179,11 @@ def test_truncation_cuts_the_window_and_clears_the_mask():
         [False, True, False, False],
         [[10.0], [20.0], [30.0], [40.0]],
     )
-    ret, discount, boot_obs, mask = n_step_return(batch, 0.9, 3)
+    ret, discount, horizon, mask = n_step_return(batch, 0.9, 3)
     np.testing.assert_allclose(np.asarray(ret), [2.8], rtol=1e-6)
     # the bootstrap observation is the next episode's first, so it is dropped
     np.testing.assert_allclose(np.asarray(discount), [0.81], rtol=1e-6)
-    np.testing.assert_allclose(np.asarray(boot_obs), [[30.0]])
+    np.testing.assert_array_equal(np.asarray(horizon), [2])
     np.testing.assert_array_equal(np.asarray(mask), [False])
 
 

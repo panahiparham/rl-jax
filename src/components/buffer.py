@@ -32,21 +32,19 @@ def build_buffer(name: str, **kwargs):
 def n_step_return(
     batch: TimeStep, gamma: float, n_step: int
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    """Accumulate the n-step return over a batch of sampled windows.
+    """Accumulate n-step returns and report each realised horizon.
 
-    Returns ``(ret, discount, boot_obs, mask)`` for windows cut at their first
-    episode boundary. ``discount`` is ``gamma ** n`` for the realised horizon
-    ``n``, and zero when the cut is a termination. ``mask`` is ``False`` when
-    the cut is a truncation, whose bootstrap observation belongs to the next
-    episode and cannot be trained on.
+    Returns ``(ret, discount, horizon, mask)`` for windows cut at their first
+    episode boundary. ``horizon`` is the realised transition count as int32;
+    ``discount`` is ``gamma ** horizon``, or zero when the cut is a termination.
+    ``mask`` is ``False`` when the cut is a truncation, whose bootstrap
+    observation belongs to the next episode and cannot be trained on.
     """
     done = (batch.termination | batch.truncation)[:, :-1]
     alive = jnp.cumprod(1.0 - done.astype(jnp.float32), axis=1)
     w = jnp.concatenate([jnp.ones_like(alive[:, :1]), alive[:, :-1]], axis=1)
     ret = jnp.sum(w * gamma ** jnp.arange(n_step) * batch.reward[:, :n_step], axis=1)
     n = jnp.sum(w, axis=1).astype(jnp.int32)
-    obs_idx = n.reshape((-1,) + (1,) * (batch.obs.ndim - 1))
-    boot_obs = jnp.take_along_axis(batch.obs, obs_idx, axis=1).squeeze(1)
     cut_idx = (n - 1)[:, None]
     term_cut = jnp.take_along_axis(
         batch.termination[:, :n_step], cut_idx, axis=1
@@ -55,7 +53,7 @@ def n_step_return(
         batch.truncation[:, :n_step], cut_idx, axis=1
     ).squeeze(1)
     discount = gamma**n * (1.0 - term_cut.astype(jnp.float32))
-    return ret, discount, boot_obs, ~trunc_cut
+    return ret, discount, n, ~trunc_cut
 
 
 def stored_transitions(state: Any) -> TimeStep:
@@ -116,7 +114,11 @@ class ReplayBuffer:
 
     def sample(self, state: Any, key: jax.Array):
         window = self._buffer.sample(state, key).experience
-        ret, discount, boot_obs, mask = n_step_return(window, self._gamma, self._n_step)
+        ret, discount, horizon, mask = n_step_return(
+            window, self._gamma, self._n_step
+        )
+        obs_idx = horizon.reshape((-1,) + (1,) * (window.obs.ndim - 1))
+        boot_obs = jnp.take_along_axis(window.obs, obs_idx, axis=1).squeeze(1)
         return Batch(
             obs=window.obs[:, 0],
             action=window.action[:, 0],
