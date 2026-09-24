@@ -35,10 +35,10 @@ from experiment.design import Component, Experiment
 
 from agents.dqn import DQNConfig
 from agents.random import RandomConfig
-from environments.atari import AtariConfig
+from environments.atari import RevisitingALEConfig
 from main import ExperimentConfig
 
-_ATARI_PONG = AtariConfig(
+_ATARI_PONG = RevisitingALEConfig(
     GAME="pong",                     # json: environment_settings.game
     FRAMESKIP=4,                     # json: environment_settings.frameskip
     STICKY_ACTIONS=0.25,             # json: environment_settings.sticky_actions

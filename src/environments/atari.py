@@ -40,6 +40,10 @@ class DopamineAtariConfig(AtariConfig):
     LIMITED_ACTION_SPACE: bool = True
 
 @dataclass(frozen=True)
+class RevisitingALEConfig(AtariConfig):
+    pass
+
+@dataclass(frozen=True)
 class EPRAtariConfig(AtariConfig): # Endpoint replay settings
     MAX_FRAMES_PER_EPISODE: int = 108_000
     LIMITED_ACTION_SPACE: bool = True

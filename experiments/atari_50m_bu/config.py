@@ -4,7 +4,7 @@ from experiment.design import Component, Experiment
 
 from agents.agent0 import Agent0Config
 from agents.dqn import DQNConfig
-from environments.atari import AtariConfig
+from environments.atari import RevisitingALEConfig
 from main import ExperimentConfig
 
 _GAMES = ["battle_zone", "pong", "breakout", "ms_pacman"]
@@ -34,9 +34,9 @@ _AGENT0_HYPERS = {
     "NETWORK_PRESET": "nature_cnn_ln",
 }
 
-_ATARI = AtariConfig()
+_ATARI = RevisitingALEConfig()
 
-_REAL_ATARI = AtariConfig(
+_REAL_ATARI = RevisitingALEConfig(
     LIMITED_ACTION_SPACE=False,
     NOOP_MAX=0,
 )
