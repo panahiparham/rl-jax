@@ -22,9 +22,12 @@ class Batch(NamedTuple):
 
 
 class BufferState(NamedTuple):
+    # data.obs stores each step's newest frame, not the stacked observation.
     data: TimeStep
+    first: jax.Array
     head: jax.Array
     size: jax.Array
+    prev_done: jax.Array
 
 
 def build_buffer(name: str, **kwargs):
@@ -97,26 +100,38 @@ def n_step_return(
 
 class ReplayBuffer:
     def __init__(self, *, capacity: int, batch_size: int, n_step: int, gamma: float):
-        if capacity < n_step + 1:
-            raise ValueError("capacity must be at least n_step + 1")
         self._capacity = capacity
         self._batch_size = batch_size
         self._n_step = n_step
         self._gamma = gamma
 
     def init(self, observation_space) -> BufferState:
+        obs_shape = observation_space.shape
+        frame_channels = getattr(observation_space, "frame_channels", None)
+        if frame_channels is None:
+            self._frame_channels = obs_shape[-1]
+            frame_shape = obs_shape
+            self._stack_size = 1
+        else:
+            self._frame_channels = frame_channels
+            frame_shape = obs_shape[:-1] + (frame_channels,)
+            self._stack_size = obs_shape[-1] // frame_channels
+        if self._capacity < self._stack_size + self._n_step:
+            raise ValueError("capacity must be at least stack_size + n_step")
         return BufferState(
             data=TimeStep(
                 obs=jnp.zeros(
-                    (self._capacity, *observation_space.shape), observation_space.dtype
+                    (self._capacity, *frame_shape), observation_space.dtype
                 ),
                 action=jnp.zeros((self._capacity,), jnp.int32),
                 reward=jnp.zeros((self._capacity,), jnp.float32),
                 termination=jnp.zeros((self._capacity,), jnp.bool_),
                 truncation=jnp.zeros((self._capacity,), jnp.bool_),
             ),
+            first=jnp.zeros((self._capacity,), jnp.bool_),
             head=jnp.asarray(0, jnp.int32),
             size=jnp.asarray(0, jnp.int32),
+            prev_done=jnp.asarray(True),
         )
 
     def add(
@@ -128,34 +143,46 @@ class ReplayBuffer:
         termination: jax.Array,
         truncation: jax.Array,
     ) -> BufferState:
-        data = TimeStep(obs, action, reward, termination, truncation)
+        data = TimeStep(
+            obs[..., -self._frame_channels:], action, reward, termination, truncation
+        )
         return BufferState(
             data=jax.tree.map(
                 lambda buf, value: buf.at[state.head].set(value), state.data, data
             ),
+            first=state.first.at[state.head].set(state.prev_done),
             head=(state.head + 1) % self._capacity,
             size=jnp.minimum(state.size + 1, self._capacity),
+            prev_done=termination | truncation,
         )
 
     def sample(self, state: BufferState, key: jax.Array) -> Batch:
+        k = self._stack_size
         indices = sample_windows(
             key,
             state.head,
             state.size,
             self._capacity,
-            0,
+            k - 1,
             self._n_step,
             self._batch_size,
         )
-        window = jax.tree.map(lambda x: x[indices], state.data)
+        transition_slots = indices[:, k - 1 :]
+        transitions = jax.tree.map(lambda x: x[transition_slots], state.data)
         ret, discount, horizon, mask = n_step_return(
-            window, self._gamma, self._n_step
+            transitions, self._gamma, self._n_step
         )
-        obs_idx = horizon.reshape((-1,) + (1,) * (window.obs.ndim - 1))
-        boot_obs = jnp.take_along_axis(window.obs, obs_idx, axis=1).squeeze(1)
+        obs_slots = indices[:, :k]
+        obs = stack_frames(state.data.obs[obs_slots], state.first[obs_slots])
+        boot_slots = jnp.take_along_axis(
+            indices, horizon[:, None] + jnp.arange(k)[None, :], axis=1
+        )
+        boot_obs = stack_frames(
+            state.data.obs[boot_slots], state.first[boot_slots]
+        )
         return Batch(
-            obs=window.obs[:, 0],
-            action=window.action[:, 0],
+            obs=obs,
+            action=transitions.action[:, 0],
             ret=ret,
             discount=discount,
             boot_obs=boot_obs,
@@ -168,6 +195,19 @@ class ReplayBuffer:
     def stored_transitions(self, state: BufferState) -> TimeStep:
         """Return all stored transitions in add order, oldest first."""
         size = int(state.size)
+        skip = self._stack_size - 1 if size == self._capacity else 0
         oldest = (int(state.head) - size) % self._capacity
-        indices = (oldest + jnp.arange(size)) % self._capacity
-        return jax.tree.map(lambda x: x[indices], state.data)
+        indices = (oldest + jnp.arange(skip, size)) % self._capacity
+        frame_indices = (
+            indices[:, None] + jnp.arange(1 - self._stack_size, 1)[None, :]
+        ) % self._capacity
+        frames = state.data.obs[frame_indices]
+        first = state.first[frame_indices]
+        obs = stack_frames(frames, first)
+        return TimeStep(
+            obs=obs,
+            action=state.data.action[indices],
+            reward=state.data.reward[indices],
+            termination=state.data.termination[indices],
+            truncation=state.data.truncation[indices],
+        )

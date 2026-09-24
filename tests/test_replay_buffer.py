@@ -343,8 +343,9 @@ def test_can_sample_is_false_before_the_buffer_fills():
 
 def test_replay_buffer_requires_capacity_for_one_full_window():
     """Reject capacities too small for an n-step window."""
-    with pytest.raises(ValueError, match=r"capacity must be at least n_step \+ 1"):
-        ReplayBuffer(capacity=3, batch_size=1, n_step=3, gamma=0.9)
+    buffer = ReplayBuffer(capacity=3, batch_size=1, n_step=3, gamma=0.9)
+    with pytest.raises(ValueError, match="capacity must be at least"):
+        buffer.init(_Space)
 
 
 def test_buffer_fills_and_samples_from_a_real_env_under_jit():

@@ -67,13 +67,15 @@ class _FakeVectorEnv:
         colours = self._colours
         obs_shape = (1, frames, h, w, colours) if colours else (1, frames, h, w)
 
-        def obs(val):
-            return jnp.full(obs_shape, val, jnp.uint8)
+        def obs(frame_values):
+            per_frame = frame_values.reshape((1, frames) + (1,) * (len(obs_shape) - 2))
+            return jnp.broadcast_to(per_frame, obs_shape)
 
-        init = jnp.zeros((8,), jnp.uint8)  # [0]=step count, [1]=pending-reset flag
+        init = jnp.zeros((8,), jnp.uint8)  # count, reset flag, rolling frames
 
         def reset_fn(handle, seed):
-            return jnp.zeros((8,), jnp.uint8), (obs(0), {})
+            fresh = jnp.zeros((8,), jnp.uint8)
+            return fresh, (obs(jnp.zeros((frames,), jnp.uint8)), {})
 
         def step_fn(handle, actions):
             is_reset = handle[1] > 0
@@ -85,9 +87,16 @@ class _FakeVectorEnv:
                 .at[1]
                 .set(jnp.where(term, jnp.uint8(1), jnp.uint8(0)))
             )
-            obs_val = jnp.where(is_reset, jnp.uint8(0), count).astype(jnp.uint8)
+            new_frame = jnp.where(is_reset, jnp.uint8(0), count)
+            frame_values = jnp.concatenate(
+                (handle[3 : 2 + frames], new_frame[None])
+            )
+            frame_values = jnp.where(
+                is_reset, jnp.zeros_like(frame_values), frame_values
+            )
+            new_handle = new_handle.at[2 : 2 + frames].set(frame_values)
             return new_handle, (
-                obs(obs_val),
+                obs(frame_values),
                 jnp.where(is_reset, 0.0, 1.0).reshape((1,)).astype(jnp.float32),
                 term.reshape((1,)),
                 jnp.zeros((1,), bool),
@@ -134,7 +143,7 @@ def test_no_in_step_reset_returns_true_boundary_obs():
         obs, state, _r, terminated, _tr, _i = env.step(
             jax.random.key(1), state, jnp.int32(0)
         )
-        seen.append((int(obs[0, 0, 0]), bool(terminated)))
+        seen.append((int(obs[0, 0, -1]), bool(terminated)))
     # obs 3 = true terminal, not reset(0)
     assert seen == [(1, False), (2, False), (3, True)]
 
@@ -149,7 +158,7 @@ def test_immediate_autoreset_returns_the_fresh_obs_on_the_boundary():
         state, reward, term, trunc, obs = env.step(
             state, jax.random.key(i), jnp.int32(0)
         )
-        seen.append((int(obs[0, 0, 0]), float(reward), bool(term), bool(trunc)))
+        seen.append((int(obs[0, 0, -1]), float(reward), bool(term), bool(trunc)))
     assert seen == [
         (1, 1.0, False, False),
         (2, 1.0, False, False),
@@ -179,7 +188,7 @@ def test_non_boundary_step_does_not_double_step_the_emulator():
     state, _obs = env.init(jax.random.key(0))
     for i in range(3):
         state, _r, _te, _tr, obs = env.step(state, jax.random.key(i), jnp.int32(0))
-    assert int(obs[0, 0, 0]) == 3
+    assert int(obs[0, 0, -1]) == 3
 
 
 def test_immediate_autoreset_under_jit():
@@ -189,7 +198,7 @@ def test_immediate_autoreset_under_jit():
     def rollout(state, keys):
         def one(st, k):
             st, r, term, trunc, obs = env.step(st, k, jnp.int32(0))
-            return st, (obs[0, 0, 0], r, term, trunc)
+            return st, (obs[0, 0, -1], r, term, trunc)
 
         return jax.lax.scan(one, state, keys)
 
@@ -255,7 +264,7 @@ def test_boundary_transition_successor_is_the_fresh_frame(agent_name):
     trunc = np.asarray(transitions.truncation).astype(bool)
     # every pixel of a fake frame carries the step counter, so one pixel
     # identifies the frame
-    obs = np.asarray(transitions.obs).reshape(len(term), -1)[:, 0]
+    obs = np.asarray(transitions.obs)[:, 0, 0, -1]
 
     ends = np.flatnonzero(term)
     # exactly every cutoff-th step: no step is spent replaying the boundary
