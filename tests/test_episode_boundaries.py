@@ -5,7 +5,7 @@ The RL contract this suite pins down:
 
 * **Environments** report ``termination`` (a real MDP terminal - no bootstrap)
   and ``truncation`` (a time-limit cutoff) as *separate* flags, never merged,
-  and never both true.
+  and never both true, plus a ``discount`` that is zero on termination.
 * **Environments autoreset in place.** Every non-Atari env here (pinball,
   catch, gymnax classic control) is wrapped in
   ``environments.autoreset.AutoresetImmediate``; Atari consumes ale's dead step inside
@@ -15,7 +15,8 @@ The RL contract this suite pins down:
   ``cutoff`` steps apart.
 * **Agents do not reset anything, and no longer track a dead step.** They act
   on the observation the loop hands them and store what ``update`` receives.
-* **Replay agents** store ``(obs, action, reward, termination, truncation)``
+* **Replay agents** store
+  ``(obs, action, reward, termination, truncation, discount)``
   and rely on the stream being unbroken: ``next_obs`` at index ``i`` is always
   ``obs`` at index ``i + 1``, at a boundary as much as anywhere else.
 * **A truncated transition must not train.** Its stored successor belongs to
@@ -174,7 +175,9 @@ def test_pinball_split_and_truncation_at_cutoff():
     st, _obs = env.init(jax.random.key(0))
     rows = []
     for i in range(5):
-        st, r, term, trunc, _obs = env.step(st, jax.random.key(i), jnp.int32(0))
+        st, r, term, trunc, _discount, _obs = env.step(
+            st, jax.random.key(i), jnp.int32(0)
+        )
         rows.append((bool(term), bool(trunc), float(r)))
     assert all(not (t and tr) for t, tr, _ in rows)  # never both at once
     assert all(r == -1.0 for *_, r in rows)  # pinball reward is -1/step
@@ -265,7 +268,7 @@ def test_env_contract_boundaries_are_exactly_a_cutoff_apart(env_name):
     state, _obs = env.init(jax.random.key(0))
     flags = []
     for i in range(3 * cutoff):
-        state, _r, term, trunc, _obs = env.step(
+        state, _r, term, trunc, _discount, _obs = env.step(
             state, jax.random.key(1000 + i), jnp.int32(action)
         )
         assert not (bool(term) and bool(trunc))
@@ -282,7 +285,9 @@ def test_fake_env_boundary_hands_back_the_fresh_observation():
     state, _obs = env.init(jax.random.key(0))
     rows = []
     for i in range(4):
-        state, r, term, _trunc, obs = env.step(state, jax.random.key(i), jnp.int32(0))
+        state, r, term, _trunc, _discount, obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
         rows.append((float(obs[0]), float(r), bool(term)))
     assert rows == [
         (1.0, 1.0, False),
@@ -300,7 +305,9 @@ def test_gymnax_split_survives_wrapping_past_the_boundary():
     state, _obs = env.init(jax.random.key(0))
     rows = []
     for i in range(4):
-        state, _r, term, trunc, _obs = env.step(state, jax.random.key(i), jnp.int32(0))
+        state, _r, term, trunc, _discount, _obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
         rows.append((bool(term), bool(trunc)))
     assert rows[:2] == [(False, False), (False, False)]
     assert rows[2] == (False, True)  # cutoff -> truncated only

@@ -140,12 +140,19 @@ class DQNAgent:
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
+        discount: jax.Array,
     ):
         config = self._config
         if config.REWARD_CLIP:
             reward = jnp.sign(reward)
         buffer_state = self._buffer.add(
-            state.buffer_state, obs, action, reward, termination, truncation
+            state.buffer_state,
+            obs,
+            action,
+            reward,
+            termination,
+            truncation,
+            discount,
         )
         state = state._replace(buffer_state=buffer_state)
 

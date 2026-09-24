@@ -72,7 +72,7 @@ def _rollout_immediate(env, n_steps, actions=None):
     rows = []
     for i in range(n_steps):
         action = actions[i] if actions is not None else jnp.int32(0)
-        state, r, term, trunc, next_obs = env.step(
+        state, r, term, trunc, _discount, next_obs = env.step(
             state, jax.random.key(100 + i), action
         )
         rows.append((float(next_obs[0]), float(r), bool(term), bool(trunc)))
@@ -123,7 +123,7 @@ def test_immediate_under_jit():
     @jax.jit
     def rollout(state, keys):
         def one(st, k):
-            st, r, term, trunc, next_obs = env.step(st, k, jnp.int32(0))
+            st, r, term, trunc, _discount, next_obs = env.step(st, k, jnp.int32(0))
             return st, (next_obs[0], r, term, trunc)
 
         return jax.lax.scan(one, state, keys)
@@ -143,7 +143,7 @@ def vmapped_rollout():
         state0, _obs = env.init(key)
 
         def one(st, k):
-            st, r, term, trunc, next_obs = env.step(st, k, jnp.int32(0))
+            st, r, term, trunc, _discount, next_obs = env.step(st, k, jnp.int32(0))
             return st, (next_obs[0], r, term, trunc)
 
         return jax.lax.scan(one, state0, jax.random.split(key, 7))[1]

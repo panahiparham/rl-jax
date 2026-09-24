@@ -59,12 +59,14 @@ class EnvProtocol(Protocol):
         state: Any,
         key: jax.Array,
         action: jax.Array,
-    ) -> tuple[Any, jax.Array, jax.Array, jax.Array, jax.Array]:
+    ) -> tuple[Any, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         """Step the environment.
 
-        Returns ``(state, reward, terminated, truncated, next_obs)``. Assume
-        the environment autoresets at termination or truncation and returns
-        the starting state of the next episode.
+        Returns ``(state, reward, terminated, truncated, discount, next_obs)``.
+        ``terminated`` marks a terminal state and ``truncated`` a time limit;
+        either ends the episode, and the environment autoresets to the next
+        episode's start. ``discount`` scales the bootstrap from ``next_obs``: it
+        is zero on termination and may be zero on a non-terminal step.
         """
         ...
 
@@ -87,6 +89,7 @@ class AgtProtocol(Protocol):
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
+        discount: jax.Array,
     ) -> Any:
         """Step the agent on the transition ``obs`` -> ``action`` -> ``reward``.
 
@@ -117,10 +120,8 @@ def interaction(
         act_key, env_key, update_key, key = jax.random.split(key, 4)
 
         action = agent.act(agt_state, act_key, obs)
-        env_state, reward, termination, truncation, next_obs = environment.step(
-            env_state,
-            env_key,
-            action,
+        env_state, reward, termination, truncation, discount, next_obs = (
+            environment.step(env_state, env_key, action)
         )
         agt_state = agent.update(
             agt_state,
@@ -130,6 +131,7 @@ def interaction(
             reward,
             termination,
             truncation,
+            discount,
         )
 
         carry = (key, agt_state, env_state, next_obs)

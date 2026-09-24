@@ -31,4 +31,5 @@ class AutoresetImmediate:
         next_state = jax.tree.map(
             lambda a, b: jnp.where(done, a, b), state_reset, stepped
         )
-        return next_state, reward, termination, truncation, next_obs
+        discount = 1.0 - termination.astype(jnp.float32)
+        return next_state, reward, termination, truncation, discount, next_obs

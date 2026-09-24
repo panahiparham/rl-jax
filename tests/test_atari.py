@@ -37,10 +37,14 @@ class _Discrete:
         self.n = int(n)
 
 
+_START_LIVES = 5
+
+
 class _FakeVectorEnv:
     """Mimics ``ale_py.AtariVectorEnv`` + ``.xla()`` (jittable, no ale-py).
 
-    Terminates every ``period`` steps. Obs frames carry the step counter so a reset
+    Terminates every ``period`` steps and, when ``life_period`` is set, loses a
+    life every ``life_period`` steps. Obs frames carry the step counter so a reset
     (value 0) is distinguishable. Models ale's NEXT_STEP autoreset via a pending
     flag in the handle: a terminal step sets it; the next ``step_fn`` returns a fresh
     obs.
@@ -55,8 +59,10 @@ class _FakeVectorEnv:
         w: int = 84,
         n: int = 6,
         colours: int = 0,
+        life_period: int = 0,
     ) -> None:
         self.num_envs = num_envs
+        self._life_period = life_period
         self._period, self._frames, self._h, self._w = period, frames, h, w
         self._colours = colours
         obs_shape = (frames, h, w, colours) if colours else (frames, h, w)
@@ -65,7 +71,7 @@ class _FakeVectorEnv:
 
     def xla(self):
         frames, h, w, period = self._frames, self._h, self._w, self._period
-        colours = self._colours
+        colours, life_period = self._colours, self._life_period
         obs_shape = (1, frames, h, w, colours) if colours else (1, frames, h, w)
 
         def obs(frame_values):
@@ -74,9 +80,14 @@ class _FakeVectorEnv:
 
         init = jnp.zeros((8,), jnp.uint8)  # count, reset flag, rolling frames
 
+        def lives(count):
+            lost = count.astype(jnp.int32) // life_period if life_period else 0
+            return (jnp.int32(_START_LIVES) - lost).reshape((1,))
+
         def reset_fn(handle, seed):
             fresh = jnp.zeros((8,), jnp.uint8)
-            return fresh, (obs(jnp.zeros((frames,), jnp.uint8)), {})
+            info = {"lives": lives(fresh[0])}
+            return fresh, (obs(jnp.zeros((frames,), jnp.uint8)), info)
 
         def step_fn(handle, actions):
             is_reset = handle[1] > 0
@@ -101,7 +112,7 @@ class _FakeVectorEnv:
                 jnp.where(is_reset, 0.0, 1.0).reshape((1,)).astype(jnp.float32),
                 term.reshape((1,)),
                 jnp.zeros((1,), bool),
-                {},
+                {"lives": lives(new_handle[0])},
             )
 
         return init, reset_fn, step_fn
@@ -156,7 +167,7 @@ def test_immediate_autoreset_returns_the_fresh_obs_on_the_boundary():
     state, _obs = env.init(jax.random.key(0))
     seen = []
     for i in range(7):
-        state, reward, term, trunc, obs = env.step(
+        state, reward, term, trunc, _discount, obs = env.step(
             state, jax.random.key(i), jnp.int32(0)
         )
         seen.append((int(obs[0, 0, -1]), float(reward), bool(term), bool(trunc)))
@@ -177,7 +188,9 @@ def test_no_dead_step_reaches_the_caller():
     state, _obs = env.init(jax.random.key(0))
     rewards = []
     for i in range(6):
-        state, reward, _te, _tr, _obs = env.step(state, jax.random.key(i), jnp.int32(0))
+        state, reward, _te, _tr, _discount, _obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
         rewards.append(float(reward))
     assert rewards == [1.0] * 6
 
@@ -188,7 +201,9 @@ def test_non_boundary_step_does_not_double_step_the_emulator():
     env = AtariEnv(AtariEnvLike(_FakeVectorEnv(period=10)))
     state, _obs = env.init(jax.random.key(0))
     for i in range(3):
-        state, _r, _te, _tr, obs = env.step(state, jax.random.key(i), jnp.int32(0))
+        state, _r, _te, _tr, _discount, obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
     assert int(obs[0, 0, -1]) == 3
 
 
@@ -198,7 +213,7 @@ def test_immediate_autoreset_under_jit():
     @jax.jit
     def rollout(state, keys):
         def one(st, k):
-            st, r, term, trunc, obs = env.step(st, k, jnp.int32(0))
+            st, r, term, trunc, _discount, obs = env.step(st, k, jnp.int32(0))
             return st, (obs[0, 0, -1], r, term, trunc)
 
         return jax.lax.scan(one, state, keys)
@@ -278,6 +293,73 @@ def test_boundary_transition_successor_is_the_fresh_frame(agent_name):
     np.testing.assert_array_equal(obs[ends], [cutoff - 1, cutoff - 1])
 
 
+# --- life loss (fake env) ----------------------------------------------------
+
+
+def _discounts_and_flags(env: AtariEnv, steps: int):
+    state, _obs = env.init(jax.random.key(0))
+    rows = []
+    for i in range(steps):
+        state, _r, term, _trunc, discount, obs = env.step(
+            state, jax.random.key(i), jnp.int32(0)
+        )
+        rows.append((float(discount), bool(term), int(obs[0, 0, -1])))
+    return rows
+
+
+def test_life_loss_zeroes_the_discount_without_ending_the_episode():
+    """A lost life stops the bootstrap, but the game plays on: the episode does
+    not terminate and the frame counter keeps counting instead of resetting."""
+    inner = AtariEnvLike(_FakeVectorEnv(period=10, life_period=3))
+    env = AtariEnv(inner, zero_discount_on_life_loss=True)
+
+    rows = _discounts_and_flags(env, 9)
+
+    assert [d for d, _t, _o in rows] == [1.0, 1.0, 0.0] * 3
+    assert not any(t for _d, t, _o in rows)
+    assert [o for _d, _t, o in rows] == list(range(1, 10))
+
+
+def test_life_loss_keeps_the_discount_when_disabled():
+    """Without the option a lost life is an ordinary step."""
+    env = AtariEnv(AtariEnvLike(_FakeVectorEnv(period=10, life_period=3)))
+
+    rows = _discounts_and_flags(env, 9)
+
+    assert [d for d, _t, _o in rows] == [1.0] * 9
+
+
+@pytest.mark.parametrize("zero_discount_on_life_loss", [True, False])
+def test_termination_zeroes_the_discount(zero_discount_on_life_loss):
+    """Game over always stops the bootstrap, whatever the life-loss option."""
+    inner = AtariEnvLike(_FakeVectorEnv(period=3))
+    env = AtariEnv(inner, zero_discount_on_life_loss=zero_discount_on_life_loss)
+
+    rows = _discounts_and_flags(env, 6)
+
+    assert [(d, t) for d, t, _o in rows] == [
+        (1.0, False),
+        (1.0, False),
+        (0.0, True),
+    ] * 2
+
+
+def test_a_new_episode_restores_lives_without_a_life_loss():
+    """The reset after game over refills the lives, which must not read as a
+    life lost or gained on the new episode's first step."""
+    inner = AtariEnvLike(_FakeVectorEnv(period=4, life_period=2))
+    env = AtariEnv(inner, zero_discount_on_life_loss=True)
+
+    rows = _discounts_and_flags(env, 8)
+
+    assert [(d, t) for d, t, _o in rows] == [
+        (1.0, False),
+        (0.0, False),
+        (1.0, False),
+        (0.0, True),
+    ] * 2
+
+
 # --- DQN on image obs in jit (fake env; reliable, no ale-py) -----------------
 
 
@@ -351,33 +433,45 @@ ale_only = pytest.mark.skipif(
 @pytest.mark.parametrize("grayscale", [True, False])
 def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
     """Frame replay relies on ale restarting each stack zero-padded after every
-    termination - including a lost life under episodic life - and otherwise
-    rolling by one frame, so the buffer reproduces every observation."""
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="breakout", GRAYSCALE=grayscale))
+    episode end and otherwise rolling by one frame - through a lost life too,
+    so no step is hidden there - so the buffer reproduces every observation."""
+    cutoff = 60
+    config = AtariConfig(
+        GAME="breakout",
+        GRAYSCALE=grayscale,
+        FRAMESKIP=4,
+        MAX_FRAMES_PER_EPISODE=cutoff * 4,
+        ZERO_DISCOUNT_ON_LIFE_LOSS=True,
+    )
+    env = ENVIRONMENTS["atari"].build(config)
     channels = env.observation_space().frame_channels
-    buffer = ReplayBuffer(capacity=128, batch_size=2, n_step=1, gamma=0.99)
+    buffer = ReplayBuffer(capacity=256, batch_size=2, n_step=1, gamma=0.99)
     buffer_state = buffer.init(env.observation_space())
     step = jax.jit(env.step)
     env_state, obs = env.init(jax.random.key(0))
     assert not np.asarray(obs)[..., :-channels].any()
 
-    logged, boundaries = [], 0
-    for t in range(100):
+    logged, boundaries, life_losses = [], 0, 0
+    for t in range(150):
         action = jnp.int32(t % env.action_space().n)
-        env_state, reward, term, trunc, next_obs = step(
+        env_state, reward, term, trunc, discount, next_obs = step(
             env_state, jax.random.key(t), action
         )
-        buffer_state = buffer.add(buffer_state, obs, action, reward, term, trunc)
+        buffer_state = buffer.add(
+            buffer_state, obs, action, reward, term, trunc, discount
+        )
         logged.append(np.asarray(obs))
         older = np.asarray(next_obs)[..., :-channels]
         if bool(term | trunc):
             boundaries += 1
             assert not older.any()
         else:
+            life_losses += int(discount == 0)
             np.testing.assert_array_equal(older, np.asarray(obs)[..., channels:])
         obs = next_obs
 
-    assert boundaries >= 2  # breakout loses lives quickly under these actions
+    assert boundaries >= 2
+    assert life_losses >= 2  # breakout loses lives quickly under these actions
     np.testing.assert_array_equal(
         np.asarray(buffer.stored_transitions(buffer_state).obs), np.stack(logged)
     )
@@ -386,17 +480,20 @@ def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
 @ale_only
 def test_atari_real_immediate_autoreset_cutoff():
     """End-to-end against real ale: with the exact cutoff (no +1 fudge),
-    truncation fires at exactly ``EPISODE_CUTOFF`` agent steps into every
+    truncation fires at exactly ``cutoff`` agent steps into every
     episode, and no step is spent replaying the boundary - AtariEnv consumes
     ale's dead step itself, so boundaries land exactly ``cutoff`` apart."""
     cutoff = 12
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="pong", EPISODE_CUTOFF=cutoff))
+    config = AtariConfig(GAME="pong", FRAMESKIP=4, MAX_FRAMES_PER_EPISODE=cutoff * 4)
+    env = ENVIRONMENTS["atari"].build(config)
     state, _obs = env.init(jax.random.key(0))
 
     rows = []
     for n in range(1, 2 * cutoff + 3):
         action = jnp.int32(n % 6)
-        state, r, term, trunc, _obs = env.step(state, jax.random.key(n), action)
+        state, r, term, trunc, _discount, _obs = env.step(
+            state, jax.random.key(n), action
+        )
         rows.append((float(r), bool(term), bool(trunc)))
 
     trunc_steps = [i + 1 for i, (_r, t, tr) in enumerate(rows) if tr]
@@ -412,7 +509,8 @@ def test_atari_real_boundary_successor_is_a_fresh_frame():
     truncation: the entry after a boundary is the new episode's first frame,
     and boundaries are exactly ``cutoff`` apart with nothing dead between."""
     cutoff = 20
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="pong", EPISODE_CUTOFF=cutoff))
+    config = AtariConfig(GAME="pong", FRAMESKIP=4, MAX_FRAMES_PER_EPISODE=cutoff * 4)
+    env = ENVIRONMENTS["atari"].build(config)
     agent = RandomBufferAgent(
         RandomBufferConfig(TOTAL_TIMESTEPS=45, BUFFER_SIZE=64, BATCH_SIZE=2)
     )
@@ -433,14 +531,15 @@ def test_atari_real_boundary_successor_is_a_fresh_frame():
 
 @ale_only
 def test_atari_env_real_jit_scan():
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="pong", EPISODE_CUTOFF=1000))
+    config = AtariConfig(GAME="pong", MAX_FRAMES_PER_EPISODE=4000)
+    env = ENVIRONMENTS["atari"].build(config)
     state, obs = env.init(jax.random.key(0))
     assert obs.shape == (84, 84, 4) and obs.dtype == jnp.uint8
 
     @jax.jit
     def rollout(state, keys):
         def one(st, k):
-            st, reward, _tm, _tr, _o = env.step(st, k, jnp.int32(0))
+            st, reward, _tm, _tr, _discount, _o = env.step(st, k, jnp.int32(0))
             return st, reward
 
         return jax.lax.scan(one, state, keys)

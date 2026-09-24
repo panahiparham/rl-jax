@@ -10,6 +10,7 @@ class TimeStep(NamedTuple):
     reward: jax.Array
     termination: jax.Array
     truncation: jax.Array
+    discount: jax.Array
 
 
 class Batch(NamedTuple):
@@ -78,23 +79,24 @@ def n_step_return(
 
     Returns ``(ret, discount, horizon, mask)`` for windows cut at their first
     episode boundary. ``horizon`` is the realised transition count as int32;
-    ``discount`` is ``gamma ** horizon``, or zero when the cut is a termination.
-    ``mask`` is ``False`` when the cut is a truncation, whose bootstrap
-    observation belongs to the next episode and cannot be trained on.
+    ``discount`` is ``gamma ** horizon`` times the product of the stored step
+    discounts, so a zero step discount removes every later reward and the
+    bootstrap. ``mask`` is ``False`` when the cut is a truncation, whose
+    bootstrap observation belongs to the next episode and cannot be trained on.
     """
     done = (batch.termination | batch.truncation)[:, :-1]
     alive = jnp.cumprod(1.0 - done.astype(jnp.float32), axis=1)
     w = jnp.concatenate([jnp.ones_like(alive[:, :1]), alive[:, :-1]], axis=1)
-    ret = jnp.sum(w * gamma ** jnp.arange(n_step) * batch.reward[:, :n_step], axis=1)
+    step_discount = jnp.where(w > 0, gamma * batch.discount[:, :n_step], 1.0)
+    survival = jnp.cumprod(step_discount, axis=1)
+    weight = jnp.concatenate([w[:, :1], w[:, 1:] * survival[:, :-1]], axis=1)
+    ret = jnp.sum(weight * batch.reward[:, :n_step], axis=1)
     n = jnp.sum(w, axis=1).astype(jnp.int32)
     cut_idx = (n - 1)[:, None]
-    term_cut = jnp.take_along_axis(
-        batch.termination[:, :n_step], cut_idx, axis=1
-    ).squeeze(1)
+    discount = jnp.take_along_axis(survival, cut_idx, axis=1).squeeze(1)
     trunc_cut = jnp.take_along_axis(
         batch.truncation[:, :n_step], cut_idx, axis=1
     ).squeeze(1)
-    discount = gamma**n * (1.0 - term_cut.astype(jnp.float32))
     return ret, discount, n, ~trunc_cut
 
 
@@ -127,6 +129,7 @@ class ReplayBuffer:
                 reward=jnp.zeros((self._capacity,), jnp.float32),
                 termination=jnp.zeros((self._capacity,), jnp.bool_),
                 truncation=jnp.zeros((self._capacity,), jnp.bool_),
+                discount=jnp.zeros((self._capacity,), jnp.float32),
             ),
             first=jnp.zeros((self._capacity,), jnp.bool_),
             head=jnp.asarray(0, jnp.int32),
@@ -142,9 +145,15 @@ class ReplayBuffer:
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
+        discount: jax.Array,
     ) -> BufferState:
         data = TimeStep(
-            obs[..., -self._frame_channels:], action, reward, termination, truncation
+            obs[..., -self._frame_channels:],
+            action,
+            reward,
+            termination,
+            truncation,
+            discount,
         )
         return BufferState(
             data=jax.tree.map(
@@ -210,4 +219,5 @@ class ReplayBuffer:
             reward=state.data.reward[indices],
             termination=state.data.termination[indices],
             truncation=state.data.truncation[indices],
+            discount=state.data.discount[indices],
         )

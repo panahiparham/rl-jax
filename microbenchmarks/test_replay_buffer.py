@@ -68,6 +68,7 @@ def _compile_add_scan(
                 jnp.float32(1),
                 jnp.bool_(False),
                 jnp.bool_(False),
+                jnp.float32(1),
             )
             return state, None
 

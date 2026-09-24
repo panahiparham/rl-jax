@@ -36,6 +36,7 @@ class RandomAgent:
         reward: jax.Array,
         termination: jax.Array,
         truncation: jax.Array,
+        discount: jax.Array,
     ):
-        del key, obs, action, reward, termination, truncation
+        del key, obs, action, reward, termination, truncation, discount
         return state

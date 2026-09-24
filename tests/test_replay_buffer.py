@@ -191,6 +191,7 @@ def _window(reward, termination, truncation, obs):
         reward=jnp.array([reward]),
         termination=jnp.array([termination]),
         truncation=jnp.array([truncation]),
+        discount=1.0 - jnp.array([termination], jnp.float32),
     )
 
 
@@ -206,6 +207,7 @@ def _fill(buffer, rewards, terminations, truncations):
             jnp.asarray(r, jnp.float32),
             jnp.asarray(term),
             jnp.asarray(trunc),
+            jnp.float32(not term),
         )
     return state
 
@@ -257,6 +259,7 @@ def test_sampled_batches_match_a_reference_buffer(
             jnp.asarray(reward, jnp.float32),
             jnp.asarray(terminated),
             jnp.asarray(truncated),
+            jnp.float32(not terminated),
         )
 
     assert bool(buffer.can_sample(state))
@@ -317,6 +320,7 @@ def test_frame_stacked_batches_match_a_synthetic_environment(
             jnp.asarray(reward, jnp.float32),
             jnp.asarray(terminated),
             jnp.asarray(truncated),
+            jnp.float32(not terminated),
         )
 
     assert bool(buffer.can_sample(state))
@@ -470,6 +474,36 @@ def test_termination_cuts_the_window_and_zeroes_the_discount():
     np.testing.assert_array_equal(np.asarray(mask), [True])
 
 
+def test_zero_step_discount_ends_the_return_without_cutting_the_window():
+    """A non-terminal zero discount, such as a lost life, drops every later
+    reward and the bootstrap but leaves the window and its mask intact."""
+    batch = _window(
+        [1.0, 2.0, 3.0, 0.0],
+        [False] * 4,
+        [False] * 4,
+        [[10.0], [20.0], [30.0], [40.0]],
+    )._replace(discount=jnp.array([[1.0, 0.0, 1.0, 1.0]]))
+    ret, discount, horizon, mask = n_step_return(batch, 0.9, 3)
+    np.testing.assert_allclose(np.asarray(ret), [2.8], rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(discount), [0.0])
+    np.testing.assert_array_equal(np.asarray(horizon), [3])
+    np.testing.assert_array_equal(np.asarray(mask), [True])
+
+
+def test_step_discounts_compound_with_gamma():
+    """Each reward and the bootstrap are scaled by the step discounts before
+    them, on top of ``gamma``."""
+    batch = _window(
+        [1.0, 2.0, 3.0, 0.0],
+        [False] * 4,
+        [False] * 4,
+        [[10.0], [20.0], [30.0], [40.0]],
+    )._replace(discount=jnp.array([[0.5, 1.0, 1.0, 1.0]]))
+    ret, discount, _horizon, _mask = n_step_return(batch, 0.9, 3)
+    np.testing.assert_allclose(np.asarray(ret), [3.115], rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(discount), [0.3645], rtol=1e-6)
+
+
 def test_truncation_cuts_the_window_and_clears_the_mask():
     batch = _window(
         [1.0, 2.0, 3.0, 0.0],
@@ -533,10 +567,12 @@ def test_buffer_fills_and_samples_from_a_real_env_under_jit():
             key, env_state, obs, buffer_state = carry
             act_key, env_key, key = jax.random.split(key, 3)
             action = jax.random.randint(act_key, (), 0, 3, dtype=jnp.int32)
-            env_state, reward, term, trunc, next_obs = env.step(
+            env_state, reward, term, trunc, discount, next_obs = env.step(
                 env_state, env_key, action
             )
-            buffer_state = buffer.add(buffer_state, obs, action, reward, term, trunc)
+            buffer_state = buffer.add(
+                buffer_state, obs, action, reward, term, trunc, discount
+            )
             return (key, env_state, next_obs, buffer_state), trunc
 
         carry, truncs = jax.lax.scan(
