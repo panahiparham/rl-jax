@@ -95,18 +95,6 @@ def n_step_return(
     return ret, discount, n, ~trunc_cut
 
 
-def stored_transitions(state: BufferState) -> TimeStep:
-    """Return all stored transitions in add order, oldest first.
-
-    Once the buffer wraps, this includes the entire capacity.
-    """
-    size = int(state.size)
-    capacity = state.data.obs.shape[0]
-    oldest = (int(state.head) - size) % capacity
-    indices = (oldest + jnp.arange(size)) % capacity
-    return jax.tree.map(lambda x: x[indices], state.data)
-
-
 class ReplayBuffer:
     def __init__(self, *, capacity: int, batch_size: int, n_step: int, gamma: float):
         if capacity < n_step + 1:
@@ -176,3 +164,10 @@ class ReplayBuffer:
 
     def can_sample(self, state: BufferState) -> jax.Array:
         return state.size >= max(self._batch_size, self._n_step + 1)
+
+    def stored_transitions(self, state: BufferState) -> TimeStep:
+        """Return all stored transitions in add order, oldest first."""
+        size = int(state.size)
+        oldest = (int(state.head) - size) % self._capacity
+        indices = (oldest + jnp.arange(size)) % self._capacity
+        return jax.tree.map(lambda x: x[indices], state.data)

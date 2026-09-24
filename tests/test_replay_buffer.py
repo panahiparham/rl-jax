@@ -9,7 +9,7 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-from components import ReplayBuffer, TimeStep, n_step_return, stored_transitions
+from components import ReplayBuffer, TimeStep, n_step_return
 from components.buffer import sample_windows, stack_frames
 from environments import ENVIRONMENTS
 from environments.catch import CatchConfig
@@ -388,7 +388,7 @@ def test_stored_transitions_before_wrap_returns_exact_additions():
     buffer = ReplayBuffer(capacity=4, batch_size=2, n_step=1, gamma=0.9)
     state = _fill(buffer, [1.0, 1.0, 1.0], [False] * 3, [False] * 3)
 
-    result = stored_transitions(state)
+    result = buffer.stored_transitions(state)
 
     np.testing.assert_array_equal(np.asarray(result.obs).reshape(-1), [0.0, 1.0, 2.0])
 
@@ -397,7 +397,7 @@ def test_stored_transitions_after_wrap_returns_full_capacity_oldest_first():
     buffer = ReplayBuffer(capacity=4, batch_size=2, n_step=1, gamma=0.9)
     state = _fill(buffer, [1.0] * 6, [False] * 6, [False] * 6)
 
-    result = stored_transitions(state)
+    result = buffer.stored_transitions(state)
 
     np.testing.assert_array_equal(
         np.asarray(result.obs).reshape(-1), [2.0, 3.0, 4.0, 5.0]

@@ -19,7 +19,6 @@ import pytest
 
 from agents.dqn import DQNAgent, DQNConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
-from components import stored_transitions
 from environments import ENVIRONMENTS
 from environments.atari import AtariConfig, AtariEnv, AtariEnvLike
 from environments.autoreset import AutoresetImmediate
@@ -251,7 +250,7 @@ def test_boundary_transition_successor_is_the_fresh_frame(agent_name):
     _metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
 
     bs = final_carry[1].buffer_state
-    transitions = stored_transitions(bs)
+    transitions = agent._buffer.stored_transitions(bs)
     term = np.asarray(transitions.termination).astype(bool)
     trunc = np.asarray(transitions.truncation).astype(bool)
     # every pixel of a fake frame carries the step counter, so one pixel
@@ -375,7 +374,7 @@ def test_atari_real_boundary_successor_is_a_fresh_frame():
     _metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
 
     bs = final_carry[1].buffer_state
-    transitions = stored_transitions(bs)
+    transitions = agent._buffer.stored_transitions(bs)
     trunc = np.asarray(transitions.truncation).astype(bool)
     obs = np.asarray(transitions.obs)
 
