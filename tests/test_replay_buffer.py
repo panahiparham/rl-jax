@@ -191,6 +191,7 @@ def _window(reward, termination, truncation, obs):
         reward=jnp.array([reward]),
         termination=jnp.array([termination]),
         truncation=jnp.array([truncation]),
+        discount=1.0 - jnp.array([termination], jnp.float32),
     )
 
 
@@ -206,6 +207,7 @@ def _fill(buffer, rewards, terminations, truncations):
             jnp.asarray(r, jnp.float32),
             jnp.asarray(term),
             jnp.asarray(trunc),
+            jnp.float32(not term),
         )
     return state
 
@@ -257,6 +259,7 @@ def test_sampled_batches_match_a_reference_buffer(
             jnp.asarray(reward, jnp.float32),
             jnp.asarray(terminated),
             jnp.asarray(truncated),
+            jnp.float32(not terminated),
         )
 
     assert bool(buffer.can_sample(state))
@@ -317,6 +320,7 @@ def test_frame_stacked_batches_match_a_synthetic_environment(
             jnp.asarray(reward, jnp.float32),
             jnp.asarray(terminated),
             jnp.asarray(truncated),
+            jnp.float32(not terminated),
         )
 
     assert bool(buffer.can_sample(state))
@@ -536,7 +540,9 @@ def test_buffer_fills_and_samples_from_a_real_env_under_jit():
             env_state, reward, term, trunc, next_obs = env.step(
                 env_state, env_key, action
             )
-            buffer_state = buffer.add(buffer_state, obs, action, reward, term, trunc)
+            buffer_state = buffer.add(
+                buffer_state, obs, action, reward, term, trunc, 1.0 - term
+            )
             return (key, env_state, next_obs, buffer_state), trunc
 
         carry, truncs = jax.lax.scan(

@@ -60,7 +60,13 @@ class RandomBufferAgent:
     ):
         del key
         buffer_state = self._buffer.add(
-            state.buffer_state, obs, action, reward, termination, truncation
+            state.buffer_state,
+            obs,
+            action,
+            reward,
+            termination,
+            truncation,
+            1.0 - termination.astype(jnp.float32),
         )
         return state._replace(buffer_state=buffer_state)
 

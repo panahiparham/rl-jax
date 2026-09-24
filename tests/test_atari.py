@@ -368,7 +368,9 @@ def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
         env_state, reward, term, trunc, next_obs = step(
             env_state, jax.random.key(t), action
         )
-        buffer_state = buffer.add(buffer_state, obs, action, reward, term, trunc)
+        buffer_state = buffer.add(
+            buffer_state, obs, action, reward, term, trunc, 1.0 - term
+        )
         logged.append(np.asarray(obs))
         older = np.asarray(next_obs)[..., :-channels]
         if bool(term | trunc):
