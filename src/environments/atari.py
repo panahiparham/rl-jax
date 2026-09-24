@@ -8,15 +8,16 @@ import jax.numpy as jnp
 
 @dataclass(frozen=True)
 class AtariConfig:
-    # revisiting ALE recommendations (using frameskip 4 instead of 5 on purpose)
+    # Dopamine baselines settings (matching published curves, but current version
+    # uses 100k frame cutoff)
     GAME: str = "pong"
     FRAMESKIP: int = 4
     STICKY_ACTIONS: float = 0.25
-    MAX_FRAMES_PER_EPISODE: int = 18_000
+    MAX_FRAMES_PER_EPISODE: int = 108_000
     IMG_HEIGHT: int = 84
     IMG_WIDTH: int = 84
     GRAYSCALE: bool = True
-    LIMITED_ACTION_SPACE: bool = False
+    LIMITED_ACTION_SPACE: bool = True
     NOOP_MAX: int = 0
     STACK_NUM: int = 4
     MAXPOOL: bool = True
@@ -28,21 +29,17 @@ class AtariConfig:
 class ClassicAtariConfig(AtariConfig):
     # Original DQN settings (DQN Zoo)
     STICKY_ACTIONS: float = 0.0
-    MAX_FRAMES_PER_EPISODE: int = 108_000
-    LIMITED_ACTION_SPACE: bool = True
     NOOP_MAX: int = 31
     ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 @dataclass(frozen=True)
-class DopamineAtariConfig(AtariConfig):
-    # Dopamine baselines settings (matching published curves, but current version uses 100k frame cutoff)
-    MAX_FRAMES_PER_EPISODE: int = 108_000
-    LIMITED_ACTION_SPACE: bool = True
+class RevisitingALEConfig(AtariConfig):
+    # revisiting ALE recommendations (using frameskip 4 instead of 5 on purpose)
+    MAX_FRAMES_PER_EPISODE: int = 18_000
+    LIMITED_ACTION_SPACE: bool = False
 
 @dataclass(frozen=True)
 class EPRAtariConfig(AtariConfig): # Endpoint replay settings
-    MAX_FRAMES_PER_EPISODE: int = 108_000
-    LIMITED_ACTION_SPACE: bool = True
     ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 
