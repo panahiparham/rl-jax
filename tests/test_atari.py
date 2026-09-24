@@ -37,10 +37,14 @@ class _Discrete:
         self.n = int(n)
 
 
+_START_LIVES = 5
+
+
 class _FakeVectorEnv:
     """Mimics ``ale_py.AtariVectorEnv`` + ``.xla()`` (jittable, no ale-py).
 
-    Terminates every ``period`` steps. Obs frames carry the step counter so a reset
+    Terminates every ``period`` steps and, when ``life_period`` is set, loses a
+    life every ``life_period`` steps. Obs frames carry the step counter so a reset
     (value 0) is distinguishable. Models ale's NEXT_STEP autoreset via a pending
     flag in the handle: a terminal step sets it; the next ``step_fn`` returns a fresh
     obs.
@@ -55,8 +59,10 @@ class _FakeVectorEnv:
         w: int = 84,
         n: int = 6,
         colours: int = 0,
+        life_period: int = 0,
     ) -> None:
         self.num_envs = num_envs
+        self._life_period = life_period
         self._period, self._frames, self._h, self._w = period, frames, h, w
         self._colours = colours
         obs_shape = (frames, h, w, colours) if colours else (frames, h, w)
@@ -65,7 +71,7 @@ class _FakeVectorEnv:
 
     def xla(self):
         frames, h, w, period = self._frames, self._h, self._w, self._period
-        colours = self._colours
+        colours, life_period = self._colours, self._life_period
         obs_shape = (1, frames, h, w, colours) if colours else (1, frames, h, w)
 
         def obs(frame_values):
@@ -74,9 +80,14 @@ class _FakeVectorEnv:
 
         init = jnp.zeros((8,), jnp.uint8)  # count, reset flag, rolling frames
 
+        def lives(count):
+            lost = count.astype(jnp.int32) // life_period if life_period else 0
+            return (jnp.int32(_START_LIVES) - lost).reshape((1,))
+
         def reset_fn(handle, seed):
             fresh = jnp.zeros((8,), jnp.uint8)
-            return fresh, (obs(jnp.zeros((frames,), jnp.uint8)), {})
+            info = {"lives": lives(fresh[0])}
+            return fresh, (obs(jnp.zeros((frames,), jnp.uint8)), info)
 
         def step_fn(handle, actions):
             is_reset = handle[1] > 0
@@ -101,7 +112,7 @@ class _FakeVectorEnv:
                 jnp.where(is_reset, 0.0, 1.0).reshape((1,)).astype(jnp.float32),
                 term.reshape((1,)),
                 jnp.zeros((1,), bool),
-                {},
+                {"lives": lives(new_handle[0])},
             )
 
         return init, reset_fn, step_fn
@@ -355,19 +366,26 @@ ale_only = pytest.mark.skipif(
 @pytest.mark.parametrize("grayscale", [True, False])
 def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
     """Frame replay relies on ale restarting each stack zero-padded after every
-    termination - including a lost life under episodic life - and otherwise
-    rolling by one frame, so the buffer reproduces every observation."""
-    config = AtariConfig(GAME="breakout", GRAYSCALE=grayscale, EPISODIC_LIFE=True)
+    episode end and otherwise rolling by one frame - through a lost life too,
+    so no step is hidden there - so the buffer reproduces every observation."""
+    cutoff = 60
+    config = AtariConfig(
+        GAME="breakout",
+        GRAYSCALE=grayscale,
+        FRAMESKIP=4,
+        MAX_FRAMES_PER_EPISODE=cutoff * 4,
+        ZERO_DISCOUNT_ON_LIFE_LOSS=True,
+    )
     env = ENVIRONMENTS["atari"].build(config)
     channels = env.observation_space().frame_channels
-    buffer = ReplayBuffer(capacity=128, batch_size=2, n_step=1, gamma=0.99)
+    buffer = ReplayBuffer(capacity=256, batch_size=2, n_step=1, gamma=0.99)
     buffer_state = buffer.init(env.observation_space())
     step = jax.jit(env.step)
     env_state, obs = env.init(jax.random.key(0))
     assert not np.asarray(obs)[..., :-channels].any()
 
-    logged, boundaries = [], 0
-    for t in range(100):
+    logged, boundaries, life_losses = [], 0, 0
+    for t in range(150):
         action = jnp.int32(t % env.action_space().n)
         env_state, reward, term, trunc, discount, next_obs = step(
             env_state, jax.random.key(t), action
@@ -381,10 +399,12 @@ def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
             boundaries += 1
             assert not older.any()
         else:
+            life_losses += int(discount == 0)
             np.testing.assert_array_equal(older, np.asarray(obs)[..., channels:])
         obs = next_obs
 
-    assert boundaries >= 2  # breakout loses lives quickly under these actions
+    assert boundaries >= 2
+    assert life_losses >= 2  # breakout loses lives quickly under these actions
     np.testing.assert_array_equal(
         np.asarray(buffer.stored_transitions(buffer_state).obs), np.stack(logged)
     )

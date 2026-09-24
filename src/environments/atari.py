@@ -17,11 +17,10 @@ class AtariConfig: # revisiting ALE recommendations
     GRAYSCALE: bool = True
     LIMITED_ACTION_SPACE: bool = False
     NOOP_MAX: int = 0
-    EPISODIC_LIFE: bool = False
     STACK_NUM: int = 4
     MAXPOOL: bool = True
     USE_FIRE_RESET: bool = False
-    LIFE_LOSS_INFO: bool = False
+    ZERO_DISCOUNT_ON_LIFE_LOSS: bool = False
     REWARD_CLIPPING: bool = False
 
 @dataclass(frozen=True)
@@ -30,7 +29,7 @@ class ClassicAtariConfig(AtariConfig): # Original DQN settings (DQN Zoo)
     MAX_FRAMES_PER_EPISODE: int = 108_000
     LIMITED_ACTION_SPACE: bool = True
     NOOP_MAX: int = 31
-    LIFE_LOSS_INFO: bool = True
+    ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 @dataclass(frozen=True)
 class DopamineAtariConfig(AtariConfig): # Dopamine baselines settings
@@ -41,7 +40,7 @@ class DopamineAtariConfig(AtariConfig): # Dopamine baselines settings
 class EPRAtariConfig(AtariConfig): # Endpoint replay settings
     MAX_FRAMES_PER_EPISODE: int = 108_000
     LIMITED_ACTION_SPACE: bool = True
-    LIFE_LOSS_INFO: bool = True
+    ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 
 class _Box:
@@ -60,6 +59,7 @@ class _Discrete:
 
 class AtariState(NamedTuple):
     handle: jax.Array
+    lives: jax.Array
 
 
 class AtariEnvLike:
@@ -101,8 +101,8 @@ class AtariEnvLike:
         seed = jax.random.randint(key, (1,), 0, jnp.iinfo(jnp.int32).max).astype(
             jnp.int32
         )
-        handle, (obs, _info) = self._reset_fn(self._init_handle, seed)
-        return self._to_hwc(obs), AtariState(handle=handle)
+        handle, (obs, info) = self._reset_fn(self._init_handle, seed)
+        return self._to_hwc(obs), AtariState(handle=handle, lives=info["lives"][0])
 
     def step(
         self,
@@ -113,7 +113,7 @@ class AtariEnvLike:
     ):
         del key  # ale keeps its own RNG
         actions = jnp.asarray(action, dtype=jnp.int32).reshape((1,))
-        handle, (obs, rewards, terminations, truncations, _info) = self._step_fn(
+        handle, (obs, rewards, terminations, truncations, info) = self._step_fn(
             state.handle, actions
         )
         # Guards the FFI boundary against an intermittent macOS-CPU ale-py XLA segfault.
@@ -122,13 +122,14 @@ class AtariEnvLike:
         reward = rewards[0].astype(jnp.float32)
         terminated = terminations[0]
         truncated = truncations[0]
-        state = AtariState(handle=handle)
+        state = AtariState(handle=handle, lives=info["lives"][0])
         return self._to_hwc(obs), state, reward, terminated, truncated, {}
 
 
 class AtariEnv:
-    def __init__(self, inner: AtariEnvLike):
+    def __init__(self, inner: AtariEnvLike, zero_discount_on_life_loss: bool = False):
         self._env = inner
+        self._zero_discount_on_life_loss = zero_discount_on_life_loss
 
     def observation_space(self):
         return self._env.observation_space()
@@ -144,6 +145,9 @@ class AtariEnv:
         obs, stepped, reward, termination, truncation, _info = self._env.step(
             key, state, action
         )
+        # ale does not count losing the last life; that step is the game over
+        life_lost = (stepped.lives < state.lives) & (stepped.lives > 0)
+        no_bootstrap = termination | (self._zero_discount_on_life_loss & life_lost)
 
         def _consume_dead_step(carry):
             st, _boundary_obs = carry
@@ -156,7 +160,7 @@ class AtariEnv:
             lambda carry: carry,
             (stepped, obs),
         )
-        discount = 1.0 - termination.astype(jnp.float32)
+        discount = 1.0 - no_bootstrap.astype(jnp.float32)
         return next_state, reward, termination, truncation, discount, next_obs
 
 
@@ -208,11 +212,12 @@ def build(config: AtariConfig):
         "grayscale": bool(config.GRAYSCALE),
         "full_action_space": not config.LIMITED_ACTION_SPACE,
         "noop_max": int(config.NOOP_MAX),
-        "episodic_life": bool(config.EPISODIC_LIFE),
         "stack_num": int(config.STACK_NUM),
         "maxpool": bool(config.MAXPOOL),
         "use_fire_reset": bool(config.USE_FIRE_RESET),
-        "life_loss_info": bool(config.LIFE_LOSS_INFO),
         "reward_clipping": bool(config.REWARD_CLIPPING),
     }
-    return AtariEnv(AtariEnvLike(ale_py.AtariVectorEnv(**kwargs)))
+    return AtariEnv(
+        AtariEnvLike(ale_py.AtariVectorEnv(**kwargs)),
+        zero_discount_on_life_loss=config.ZERO_DISCOUNT_ON_LIFE_LOSS,
+    )

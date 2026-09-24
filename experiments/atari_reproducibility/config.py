@@ -34,7 +34,6 @@ _ATARI = AtariConfig()
 
 _REAL_ATARI = AtariConfig(
     LIMITED_ACTION_SPACE=False,
-    EPISODIC_LIFE=False,
     NOOP_MAX=0,
 )
 
