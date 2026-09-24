@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from functools import cache
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from hypothesis import example, given, settings
+from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
 from components import ReplayBuffer, TimeStep, n_step_return
@@ -15,9 +16,25 @@ from environments import ENVIRONMENTS
 from environments.catch import CatchConfig
 
 
+class _ReferenceSample(NamedTuple):
+    ret: float
+    discount: float
+    horizon: int
+    boot_id: int
+    mask: bool
+
+
 class _Space:
     shape = (1,)
     dtype = jnp.float32
+
+
+class _FrameStackSpace:
+    dtype = jnp.int32
+
+    def __init__(self, shape: tuple[int, ...], frame_channels: int):
+        self.shape = shape
+        self.frame_channels = frame_channels
 
 
 @st.composite
@@ -63,6 +80,25 @@ def _compiled_sampler(capacity: int, n_step: int, batch_size: int):
     return buffer, jax.jit(jax.vmap(buffer.sample, in_axes=(None, 0)))
 
 
+@cache
+def _compiled_frame_sampler(
+    capacity: int,
+    n_step: int,
+    height: int,
+    width: int,
+    stack_size: int,
+    frame_channels: int,
+):
+    batch_size = 2
+    buffer = ReplayBuffer(
+        capacity=capacity, batch_size=batch_size, n_step=n_step, gamma=0.9
+    )
+    space = _FrameStackSpace(
+        (height, width, stack_size * frame_channels), frame_channels
+    )
+    return buffer, space, jax.jit(jax.vmap(buffer.sample, in_axes=(None, 0)))
+
+
 _jit_sample_windows = jax.jit(
     sample_windows,
     static_argnames=("capacity", "lookback", "lookahead", "batch_size"),
@@ -71,15 +107,80 @@ _jit_sample_windows = jax.jit(
 
 def _reference_sample(
     transitions: list[tuple[int, int, int, bool, bool]], start: int, n_step: int
-):
+) -> _ReferenceSample:
     window = transitions[start : start + n_step]
     horizon = next((i + 1 for i, t in enumerate(window) if t[3] or t[4]), n_step)
     last = window[horizon - 1]
-    return (
+    return _ReferenceSample(
         sum(0.9**i * t[2] for i, t in enumerate(window[:horizon])),
         0.0 if last[3] else 0.9**horizon,
+        horizon,
         transitions[start + horizon][0],
         not last[4],
+    )
+
+
+def _synthetic_frame_log(
+    episode_lengths: list[int],
+    truncations: list[bool],
+    height: int,
+    width: int,
+    stack_size: int,
+    frame_channels: int,
+):
+    transitions = []
+    observations = []
+    pixel = (
+        np.arange(height)[:, None, None] * 30
+        + np.arange(width)[None, :, None] * 3
+        + np.arange(frame_channels)[None, None, :]
+    )
+    step = 0
+    for episode_id, (length, is_truncation) in enumerate(
+        zip(episode_lengths, truncations, strict=True)
+    ):
+        frames = []
+        for episode_step in range(length):
+            frame = (step * 10_000 + episode_id * 1_000 + pixel).astype(np.int32)
+            frames.append(frame)
+            padded = [np.zeros_like(frame)] * (stack_size - len(frames))
+            observations.append(
+                np.concatenate((*padded, *frames[-stack_size:]), axis=-1)
+            )
+            terminated = episode_step == length - 1 and not is_truncation
+            truncated = episode_step == length - 1 and is_truncation
+            reward = (step * 3 + episode_id) % 7 - 3
+            transitions.append((step, step, reward, terminated, truncated))
+            step += 1
+    return transitions, observations
+
+
+@st.composite
+def _frame_stack_cases(draw: st.DrawFn):
+    height = draw(st.integers(1, 3))
+    width = draw(st.integers(1, 3))
+    stack_size = draw(st.sampled_from([1, 2, 4]))
+    frame_channels = draw(st.sampled_from([1, 3]))
+    n_step = draw(st.integers(1, 3))
+    capacity = draw(st.integers(max(stack_size + n_step, 4), 8))
+    episode_lengths = draw(st.lists(st.integers(1, 5), min_size=2, max_size=4))
+    assume(sum(episode_lengths) >= max(2, n_step + 1))
+    truncations = draw(
+        st.lists(
+            st.booleans(),
+            min_size=len(episode_lengths),
+            max_size=len(episode_lengths),
+        )
+    )
+    return (
+        height,
+        width,
+        stack_size,
+        frame_channels,
+        n_step,
+        capacity,
+        episode_lengths,
+        truncations,
     )
 
 
@@ -172,10 +273,80 @@ def test_sampled_batches_match_a_reference_buffer(
         retained_start = int(start_id - retained[0][0])
         expected = _reference_sample(retained, retained_start, n_step)
         assert batch.action[row] == retained[retained_start][1]
-        assert np.isclose(batch.ret[row], expected[0], rtol=1e-6)
-        assert np.isclose(batch.discount[row], expected[1], rtol=1e-6)
-        assert int(batch.boot_obs[row]) == expected[2]
-        assert bool(batch.mask[row]) is expected[3]
+        assert np.isclose(batch.ret[row], expected.ret, rtol=1e-6)
+        assert np.isclose(batch.discount[row], expected.discount, rtol=1e-6)
+        assert int(batch.boot_obs[row]) == expected.boot_id
+        assert bool(batch.mask[row]) is expected.mask
+
+
+@settings(max_examples=8, deadline=None, derandomize=True)
+@given(case=_frame_stack_cases())
+@example(case=(2, 3, 4, 1, 1, 8, [1, 2, 2], [False, True, False]))
+@example(case=(2, 3, 4, 3, 1, 7, [1, 2, 4, 1], [False, True, False, True]))
+def test_frame_stacked_batches_match_a_synthetic_environment(
+    case: tuple[int, int, int, int, int, int, list[int], list[bool]],
+):
+    """Rebuild sampled and retained observations from synthetic episode frames."""
+    (
+        height,
+        width,
+        stack_size,
+        frame_channels,
+        n_step,
+        capacity,
+        episode_lengths,
+        truncations,
+    ) = case
+    transitions, observations = _synthetic_frame_log(
+        episode_lengths,
+        truncations,
+        height,
+        width,
+        stack_size,
+        frame_channels,
+    )
+    buffer, space, sample = _compiled_frame_sampler(
+        capacity, n_step, height, width, stack_size, frame_channels
+    )
+    state = buffer.init(space)
+    for step, action, reward, terminated, truncated in transitions:
+        state = buffer.add(
+            state,
+            jnp.asarray(observations[step]),
+            jnp.asarray(action, jnp.int32),
+            jnp.asarray(reward, jnp.float32),
+            jnp.asarray(terminated),
+            jnp.asarray(truncated),
+        )
+
+    assert bool(buffer.can_sample(state))
+    retained = transitions[-capacity:]
+    batches = jax.tree.map(
+        np.asarray, sample(state, jax.random.split(jax.random.key(0), 16))
+    )
+    batches = jax.tree.map(
+        lambda x: x.reshape((-1, *x.shape[2:])), batches
+    )
+    for row, start_id in enumerate(batches.action.astype(int)):
+        retained_start = next(
+            i for i, transition in enumerate(retained) if transition[0] == start_id
+        )
+        assert retained_start < len(retained) - n_step
+        expected = _reference_sample(retained, retained_start, n_step)
+        assert np.isclose(batches.ret[row], expected.ret, rtol=1e-6)
+        assert np.isclose(batches.discount[row], expected.discount, rtol=1e-6)
+        assert bool(batches.mask[row]) is expected.mask
+        np.testing.assert_array_equal(batches.obs[row], observations[start_id])
+        np.testing.assert_array_equal(
+            batches.boot_obs[row], observations[start_id + expected.horizon]
+        )
+
+    stored = buffer.stored_transitions(state)
+    skip = stack_size - 1 if len(transitions) >= capacity else 0
+    expected_ids = [transition[0] for transition in retained[skip:]]
+    np.testing.assert_array_equal(
+        np.asarray(stored.obs), np.stack([observations[i] for i in expected_ids])
+    )
 
 
 @settings(max_examples=8, deadline=None, derandomize=True)
