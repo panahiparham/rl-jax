@@ -18,6 +18,15 @@ class AtariConfig:
     LIMITED_ACTION_SPACE: bool = True
     NOOP_MAX: int = 30
     EPISODIC_LIFE: bool = True
+    STACK_NUM: int = 4
+    MAXPOOL: bool = True
+    USE_FIRE_RESET: bool = True
+    LIFE_LOSS_INFO: bool = False
+    # ale clips by default; the agent's REWARD_CLIP owns clipping, so the
+    # reward reaching the caller stays the game's own score.
+    REWARD_CLIPPING: bool = False
+    NUM_THREADS: int = 0
+    THREAD_AFFINITY_OFFSET: int = -1
 
 
 class _Box:
@@ -183,9 +192,13 @@ def build(config: AtariConfig):
         "full_action_space": not config.LIMITED_ACTION_SPACE,
         "noop_max": int(config.NOOP_MAX),
         "episodic_life": bool(config.EPISODIC_LIFE),
-        # ale clips by default; the agent's REWARD_CLIP owns clipping, so the
-        # reward reaching the caller stays the game's own score.
-        "reward_clipping": False,
+        "stack_num": int(config.STACK_NUM),
+        "maxpool": bool(config.MAXPOOL),
+        "use_fire_reset": bool(config.USE_FIRE_RESET),
+        "life_loss_info": bool(config.LIFE_LOSS_INFO),
+        "reward_clipping": bool(config.REWARD_CLIPPING),
+        "num_threads": int(config.NUM_THREADS),
+        "thread_affinity_offset": int(config.THREAD_AFFINITY_OFFSET),
     }
     if config.EPISODE_CUTOFF and config.EPISODE_CUTOFF > 0:
         kwargs["max_num_frames_per_episode"] = int(config.EPISODE_CUTOFF) * int(
