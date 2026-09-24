@@ -353,7 +353,8 @@ def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
     """Frame replay relies on ale restarting each stack zero-padded after every
     termination - including a lost life under episodic life - and otherwise
     rolling by one frame, so the buffer reproduces every observation."""
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="breakout", GRAYSCALE=grayscale))
+    config = AtariConfig(GAME="breakout", GRAYSCALE=grayscale, EPISODIC_LIFE=True)
+    env = ENVIRONMENTS["atari"].build(config)
     channels = env.observation_space().frame_channels
     buffer = ReplayBuffer(capacity=128, batch_size=2, n_step=1, gamma=0.99)
     buffer_state = buffer.init(env.observation_space())
@@ -386,11 +387,12 @@ def test_atari_frame_stacks_restart_zero_padded_at_every_boundary(grayscale):
 @ale_only
 def test_atari_real_immediate_autoreset_cutoff():
     """End-to-end against real ale: with the exact cutoff (no +1 fudge),
-    truncation fires at exactly ``EPISODE_CUTOFF`` agent steps into every
+    truncation fires at exactly ``cutoff`` agent steps into every
     episode, and no step is spent replaying the boundary - AtariEnv consumes
     ale's dead step itself, so boundaries land exactly ``cutoff`` apart."""
     cutoff = 12
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="pong", EPISODE_CUTOFF=cutoff))
+    config = AtariConfig(GAME="pong", FRAMESKIP=4, MAX_FRAMES_PER_EPISODE=cutoff * 4)
+    env = ENVIRONMENTS["atari"].build(config)
     state, _obs = env.init(jax.random.key(0))
 
     rows = []
@@ -412,7 +414,8 @@ def test_atari_real_boundary_successor_is_a_fresh_frame():
     truncation: the entry after a boundary is the new episode's first frame,
     and boundaries are exactly ``cutoff`` apart with nothing dead between."""
     cutoff = 20
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="pong", EPISODE_CUTOFF=cutoff))
+    config = AtariConfig(GAME="pong", FRAMESKIP=4, MAX_FRAMES_PER_EPISODE=cutoff * 4)
+    env = ENVIRONMENTS["atari"].build(config)
     agent = RandomBufferAgent(
         RandomBufferConfig(TOTAL_TIMESTEPS=45, BUFFER_SIZE=64, BATCH_SIZE=2)
     )
@@ -433,7 +436,8 @@ def test_atari_real_boundary_successor_is_a_fresh_frame():
 
 @ale_only
 def test_atari_env_real_jit_scan():
-    env = ENVIRONMENTS["atari"].build(AtariConfig(GAME="pong", EPISODE_CUTOFF=1000))
+    config = AtariConfig(GAME="pong", MAX_FRAMES_PER_EPISODE=4000)
+    env = ENVIRONMENTS["atari"].build(config)
     state, obs = env.init(jax.random.key(0))
     assert obs.shape == (84, 84, 4) and obs.dtype == jnp.uint8
 

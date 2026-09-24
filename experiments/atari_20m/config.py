@@ -36,7 +36,7 @@ _ATARI_PONG = AtariConfig(
     GAME="pong",                     # json: environment_settings.game
     FRAMESKIP=4,                     # json: environment_settings.frameskip
     STICKY_ACTIONS=0.25,             # json: environment_settings.sticky_actions
-    EPISODE_CUTOFF=27_000,           # json: EPISODE_CUTOFF (agent steps)
+    MAX_FRAMES_PER_EPISODE=108_000,  # json: EPISODE_CUTOFF=27_000 agent steps
 )
 
 EXPERIMENT = Experiment(
