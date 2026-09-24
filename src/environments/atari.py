@@ -7,20 +7,20 @@ import jax.numpy as jnp
 
 
 @dataclass(frozen=True)
-class AtariConfig:
+class AtariConfig: # revisiting ALE recommendations
     GAME: str = "pong"
-    FRAMESKIP: int = 4
+    FRAMESKIP: int = 5
     STICKY_ACTIONS: float = 0.25
-    EPISODE_CUTOFF: int = 27000
+    EPISODE_CUTOFF: int = 18_000
     IMG_HEIGHT: int = 84
     IMG_WIDTH: int = 84
     GRAYSCALE: bool = True
-    LIMITED_ACTION_SPACE: bool = True
-    NOOP_MAX: int = 30
-    EPISODIC_LIFE: bool = True
+    LIMITED_ACTION_SPACE: bool = False
+    NOOP_MAX: int = 0
+    EPISODIC_LIFE: bool = False
     STACK_NUM: int = 4
     MAXPOOL: bool = True
-    USE_FIRE_RESET: bool = True
+    USE_FIRE_RESET: bool = False
     LIFE_LOSS_INFO: bool = False
     REWARD_CLIPPING: bool = False
 
