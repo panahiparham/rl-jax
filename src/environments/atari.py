@@ -7,7 +7,8 @@ import jax.numpy as jnp
 
 
 @dataclass(frozen=True)
-class AtariConfig: # revisiting ALE recommendations
+class AtariConfig:
+    # revisiting ALE recommendations (using frameskip 4 instead of 5 on purpose)
     GAME: str = "pong"
     FRAMESKIP: int = 4
     STICKY_ACTIONS: float = 0.25
@@ -24,7 +25,8 @@ class AtariConfig: # revisiting ALE recommendations
     REWARD_CLIPPING: bool = False
 
 @dataclass(frozen=True)
-class ClassicAtariConfig(AtariConfig): # Original DQN settings (DQN Zoo)
+class ClassicAtariConfig(AtariConfig):
+    # Original DQN settings (DQN Zoo)
     STICKY_ACTIONS: float = 0.0
     MAX_FRAMES_PER_EPISODE: int = 108_000
     LIMITED_ACTION_SPACE: bool = True
@@ -32,8 +34,9 @@ class ClassicAtariConfig(AtariConfig): # Original DQN settings (DQN Zoo)
     ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 @dataclass(frozen=True)
-class DopamineAtariConfig(AtariConfig): # Dopamine baselines settings
-    MAX_FRAMES_PER_EPISODE: int = 100_000
+class DopamineAtariConfig(AtariConfig):
+    # Dopamine baselines settings (matching published curves, but current version uses 100k frame cutoff)
+    MAX_FRAMES_PER_EPISODE: int = 108_000
     LIMITED_ACTION_SPACE: bool = True
 
 @dataclass(frozen=True)
