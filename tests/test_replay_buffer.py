@@ -13,7 +13,6 @@ from hypothesis import strategies as st
 from components import ReplayBuffer, TimeStep, n_step_return
 from components.buffer import sample_windows, stack_frames
 from environments import ENVIRONMENTS
-from environments.catch import CatchConfig
 
 
 class _ReferenceSample(NamedTuple):
@@ -553,10 +552,16 @@ def test_replay_buffer_requires_capacity_for_one_full_window():
         buffer.init(_Space)
 
 
-def test_buffer_fills_and_samples_from_a_real_env_under_jit():
-    """End to end: a jitted rollout of catch fills the buffer, and the
-    episode cutoff shows up as truncation-masked windows in the sample."""
-    env = ENVIRONMENTS["catch"].build(CatchConfig(EPISODE_CUTOFF=5))
+@pytest.mark.parametrize(
+    "env_name", ["catch", "cartpole", "mountaincar", "acrobot", "pinball"]
+)
+def test_buffer_fills_and_samples_from_a_real_env_under_jit(env_name: str):
+    """End to end: a jitted rollout of a vector-observation env fills the
+    buffer, and the episode cutoff shows up as truncation-masked windows in
+    the sample."""
+    spec = ENVIRONMENTS[env_name]
+    env = spec.build(spec.config_cls(EPISODE_CUTOFF=5))
+    num_actions = env.action_space().n
     buffer = ReplayBuffer(capacity=64, batch_size=64, n_step=2, gamma=0.9)
 
     def rollout(key):
@@ -566,7 +571,9 @@ def test_buffer_fills_and_samples_from_a_real_env_under_jit():
         def step(carry, _):
             key, env_state, obs, buffer_state = carry
             act_key, env_key, key = jax.random.split(key, 3)
-            action = jax.random.randint(act_key, (), 0, 3, dtype=jnp.int32)
+            action = jax.random.randint(
+                act_key, (), 0, num_actions, dtype=jnp.int32
+            )
             env_state, reward, term, trunc, discount, next_obs = env.step(
                 env_state, env_key, action
             )
