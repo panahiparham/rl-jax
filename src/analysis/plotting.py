@@ -18,6 +18,8 @@ band:
 * :func:`weighted_lifetime_return` / :func:`weighted_lifetime_return_stack` - a run's
   episode returns collapsed to one length-weighted scalar, stacked per swept hyper
   value (e.g. learning rate) for a sensitivity curve.
+  :func:`weighted_lifetime_returns_for` collects that scalar for every run of a
+  component instead.
 * :func:`average_lifetime_reward` / :func:`average_lifetime_reward_stack` - the same
   idea for a continuing task (e.g. Catch), which has no episode to derive a return
   from: mean reward rate over the whole run instead. :func:`ema_reward` is its
@@ -32,12 +34,14 @@ band:
   pooled into one aggregate.
 * :func:`plot_mean_ci` / :func:`plot_median_ti` / :func:`style` - draw a band +
   center line, and shared axes styling.
+* :func:`plot_bars_mean_ci` - one bar per group of per-run scalars (e.g. lifetime
+  returns) at their mean, with a bootstrap-CI whisker.
 """
 
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -138,6 +142,14 @@ def interp_on_grid(
     return np.interp(grid, ends, rets, left=np.nan, right=np.nan)
 
 
+def _run_ids(
+    experiment: Experiment, component: str, run_ids: Sequence[str] | None
+) -> list[str]:
+    if run_ids is not None:
+        return list(run_ids)
+    return load_runs(experiment, component)["run_id"].to_list()
+
+
 def _interp_stack_for(
     experiment: Experiment,
     component: str,
@@ -155,13 +167,8 @@ def _interp_stack_for(
     in which case ``run_ids`` restricts to one sweep point's runs. Returns an
     ``[n_seeds, len(grid)]`` array, one row per run.
     """
-    ids = (
-        list(run_ids)
-        if run_ids is not None
-        else load_runs(experiment, component)["run_id"].to_list()
-    )
     grids: list[NDArray[np.float64]] = []
-    for rid in ids:
+    for rid in _run_ids(experiment, component, run_ids):
         xs, ys = curve_fn(load_result(experiment, component, rid))
         grids.append(interp_on_grid(xs, ys, grid))
     return np.vstack(grids) if grids else np.empty((0, len(grid)))
@@ -205,6 +212,22 @@ def ema_reward_grids_for(
         return np.arange(reward.size, dtype=np.float64), ema_reward(reward, beta=beta)
 
     return _interp_stack_for(experiment, component, grid, run_ids, curve)
+
+
+def weighted_lifetime_returns_for(
+    experiment: Experiment,
+    component: str,
+    run_ids: Sequence[str] | None = None,
+) -> NDArray[np.float64]:
+    """Every run's weighted lifetime return for one component, one per run.
+
+    ``run_ids`` restricts to a subset of runs, e.g. one game of a sweep.
+    """
+    results = (
+        load_result(experiment, component, rid)
+        for rid in _run_ids(experiment, component, run_ids)
+    )
+    return np.array([weighted_lifetime_return(r["reward"], r["done"]) for r in results])
 
 
 def _metric_stack(
@@ -390,6 +413,28 @@ def plot_median_ti(
     ax.fill_between(grid[m], ti_lo[m], ti_hi[m], color=color, alpha=0.2)  # band
     ax.plot(grid[m], median[m], lw=2.5, color=color, label=label)  # thick median
     return median
+
+
+def plot_bars_mean_ci(
+    ax: Axes,
+    samples: Mapping[str, ArrayLike],
+    colors: Sequence[str],
+    n_boot: int = 10_000,
+) -> NDArray[np.float64]:
+    """Draw one bar per label at the mean of its runs, with a 95% bootstrap CI.
+
+    ``samples`` maps each bar's label to its per-run values. Returns the bar
+    heights. A single run gives a bar at its own value with no whisker.
+    """
+    stats = [
+        bootstrap_mean_ci(np.asarray(values, dtype=float)[:, None], n_boot=n_boot)
+        for values in samples.values()
+    ]
+    mean, ci_lo, ci_hi = (np.concatenate(column) for column in zip(*stats, strict=True))
+    x = np.arange(len(samples))
+    ax.bar(x, mean, color=colors, yerr=[mean - ci_lo, ci_hi - mean], capsize=6)
+    ax.set_xticks(x, list(samples))
+    return mean
 
 
 def style(

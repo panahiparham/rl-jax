@@ -32,12 +32,14 @@ from analysis.plotting import (
     mean_over_seeds,
     median_tolerance_interval,
     min_max_normalize,
+    plot_bars_mean_ci,
     plot_mean_ci,
     plot_median_ti,
     seed_grids_for,
     style,
     weighted_lifetime_return,
     weighted_lifetime_return_stack,
+    weighted_lifetime_returns_for,
 )
 
 T = 6  # curve length used by the fake agent
@@ -361,3 +363,42 @@ def test_plot_median_ti_returns_matching_median():
     plt.close(fig)
 
     assert np.allclose(out, -4)
+
+
+# --- lifetime bars --------------------------------------------------------------
+
+
+def test_weighted_lifetime_returns_for_gives_one_value_per_run(tmp_path):
+    """Every stored run contributes its own length-weighted lifetime return."""
+    experiment = swept(tmp_path)
+
+    returns = weighted_lifetime_returns_for(experiment, "comp")
+
+    # 2 LRs x 2 seeds; each run's weighted return is 10 * LR / 3
+    assert np.allclose(np.sort(returns), [1 / 3, 1 / 3, 2 / 3, 2 / 3])
+
+
+def test_weighted_lifetime_returns_for_restricts_to_run_ids(tmp_path):
+    """Passing run ids keeps only those runs, e.g. one game of a sweep."""
+    experiment = swept(tmp_path)
+    df = load_runs(experiment, "comp")
+    high_lr = df.filter(df["HYPERS.LR"] == 0.2)["run_id"].to_list()
+
+    returns = weighted_lifetime_returns_for(experiment, "comp", run_ids=high_lr)
+
+    assert np.allclose(returns, [2 / 3, 2 / 3])
+
+
+def test_plot_bars_mean_ci_draws_one_bar_per_label_at_its_mean():
+    """Each label gets a bar at its runs' mean, and a single run's bar sits at
+    its own value."""
+    fig, ax = plt.subplots()
+
+    heights = plot_bars_mean_ci(
+        ax, {"many": [1.0, 2.0, 6.0], "one": [5.0]}, ["tab:blue", "tab:red"], n_boot=200
+    )
+    labels = [tick.get_text() for tick in ax.get_xticklabels()]
+    plt.close(fig)
+
+    assert np.allclose(heights, [3.0, 5.0])
+    assert labels == ["many", "one"]

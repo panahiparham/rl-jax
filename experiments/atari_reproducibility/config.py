@@ -8,10 +8,9 @@ from main import ExperimentConfig
 
 _GAMES = ["battle_zone", "ms_pacman"]
 
-# DQNConfig.SEED is declared but never read by the agent - the run's actual
-# PRNG seed is Component.seeds below. Sweeping it here is a dummy hyper: it
-# only forces each replicate into its own run_id, so 3 identical (hyper,
-# seed) runs land as 3 distinct rows instead of deduping to one.
+# Every replicate reruns the same config at the same seed. Each gets its own
+# component, and so its own table, since identical runs within one component
+# share a run id and would be stored once.
 _REPLICATES = [0, 1, 2]
 
 _DQN_HYPERS = {
@@ -37,33 +36,28 @@ _REAL_ATARI = RevisitingALEConfig(
     NOOP_MAX=0,
 )
 
+_SETTINGS = {
+    "dqn_atari": (DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True), _ATARI),
+    "dqn_real_atari": (DQNConfig(**_DQN_HYPERS, REWARD_CLIP=False), _REAL_ATARI),
+}
+
 EXPERIMENT = Experiment(
     name="atari_reproducibility",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
         Component(
-            name="dqn_atari",
+            name=f"{setting}_replicate_{replicate}",
             config=ExperimentConfig(
                 AGENT="dqn",
                 ENV="atari",
-                AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
-                ENV_HYPERS=_ATARI,
+                AGENT_HYPERS=agent_hypers,
+                ENV_HYPERS=env_hypers,
             ),
-            sweep={"ENV_HYPERS.GAME": _GAMES, "AGENT_HYPERS.SEED": _REPLICATES},
+            sweep={"ENV_HYPERS.GAME": _GAMES},
             seeds=[0],
             shard_size=1,
-        ),
-        Component(
-            name="dqn_real_atari",
-            config=ExperimentConfig(
-                AGENT="dqn",
-                ENV="atari",
-                AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=False),
-                ENV_HYPERS=_REAL_ATARI,
-            ),
-            sweep={"ENV_HYPERS.GAME": _GAMES, "AGENT_HYPERS.SEED": _REPLICATES},
-            seeds=[0],
-            shard_size=1,
-        ),
+        )
+        for setting, (agent_hypers, env_hypers) in _SETTINGS.items()
+        for replicate in _REPLICATES
     ],
 )

@@ -47,7 +47,6 @@ class Agent0Config:
     # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
     NETWORK_PRESET: str = "mlp_ln"
     ADAM_EPS: float = traced(1e-8)
-    SEED: int = 42
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
 
 
