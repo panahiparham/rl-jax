@@ -30,6 +30,7 @@ from analysis.plotting import (
     episode_returns,
     interp_on_grid,
     mean_over_seeds,
+    min_max_normalize,
     plot_mean_ci,
     seed_grids_for,
     style,
@@ -277,3 +278,30 @@ def test_plot_mean_ci_returns_matching_mean():
     plt.close(fig)
 
     np.testing.assert_allclose(out, -4)
+
+
+# --- min_max_normalize --------------------------------------------------------
+
+
+def test_min_max_normalize_shares_bounds_across_arrays():
+    """The lowest value anywhere maps to 0 and the highest to 1, so arrays from
+    different agents on one environment stay comparable."""
+    weak, strong = min_max_normalize([[-20.0, 0.0], [10.0, 20.0]])
+    assert np.allclose(weak, [0.0, 0.5])
+    assert np.allclose(strong, [0.75, 1.0])
+
+
+def test_min_max_normalize_keeps_stack_shape_in_unit_range():
+    """A seed stack keeps its shape, and every value lands in [0, 1]."""
+    stack = np.random.default_rng(0).normal(size=(5, 7)) * 100
+    (normalized,) = min_max_normalize([stack])
+    assert normalized.shape == stack.shape
+    assert normalized.min() == 0.0
+    assert normalized.max() == 1.0
+
+
+def test_min_max_normalize_ignores_nan_for_bounds():
+    """NaN gaps in a curve neither set the bounds nor get filled in."""
+    (normalized,) = min_max_normalize([[np.nan, 2.0, 4.0, np.nan]])
+    assert np.isnan(normalized[[0, 3]]).all()
+    assert np.allclose(normalized[1:3], [0.0, 1.0])
