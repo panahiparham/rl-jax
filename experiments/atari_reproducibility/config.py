@@ -18,7 +18,7 @@ _DQN_HYPERS = {
     "TOTAL_TIMESTEPS": 2_500_000,       # 10M frames at FRAMESKIP=4
     "LR": 6.25e-05,
     "ADAM_EPS": 1.5e-4,
-    "BUFFER_SIZE": 100_000,
+    "BUFFER_SIZE": 1_000_000,
     "BATCH_SIZE": 32,
     "LEARNING_STARTS": 20_000,
     "TRAIN_FREQUENCY": 4,
