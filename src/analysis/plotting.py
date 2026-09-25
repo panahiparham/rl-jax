@@ -34,12 +34,14 @@ band:
   pooled into one aggregate.
 * :func:`plot_mean_ci` / :func:`plot_median_ti` / :func:`style` - draw a band +
   center line, and shared axes styling.
+* :func:`plot_bars_mean_ci` - one bar per group of per-run scalars (e.g. lifetime
+  returns) at their mean, with a bootstrap-CI whisker.
 """
 
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -411,6 +413,28 @@ def plot_median_ti(
     ax.fill_between(grid[m], ti_lo[m], ti_hi[m], color=color, alpha=0.2)  # band
     ax.plot(grid[m], median[m], lw=2.5, color=color, label=label)  # thick median
     return median
+
+
+def plot_bars_mean_ci(
+    ax: Axes,
+    samples: Mapping[str, ArrayLike],
+    colors: Sequence[str],
+    n_boot: int = 10_000,
+) -> NDArray[np.float64]:
+    """Draw one bar per label at the mean of its runs, with a 95% bootstrap CI.
+
+    ``samples`` maps each bar's label to its per-run values. Returns the bar
+    heights. A single run gives a bar at its own value with no whisker.
+    """
+    stats = [
+        bootstrap_mean_ci(np.asarray(values, dtype=float)[:, None], n_boot=n_boot)
+        for values in samples.values()
+    ]
+    mean, ci_lo, ci_hi = (np.concatenate(column) for column in zip(*stats, strict=True))
+    x = np.arange(len(samples))
+    ax.bar(x, mean, color=colors, yerr=[mean - ci_lo, ci_hi - mean], capsize=6)
+    ax.set_xticks(x, list(samples))
+    return mean
 
 
 def style(
