@@ -8,7 +8,6 @@ import jax.numpy as jnp
 @dataclass(frozen=True, kw_only=True)
 class RandomConfig:
     TOTAL_TIMESTEPS: int = 100_000
-    SEED: int = 0
 
 
 class RandomState(NamedTuple):

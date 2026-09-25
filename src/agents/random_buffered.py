@@ -16,7 +16,6 @@ class RandomBufferConfig:
     BATCH_SIZE: int = 32
     N_STEP: int = 1
     GAMMA: float = traced(0.99)
-    SEED: int = 0
 
 
 class RandomBufferState(NamedTuple):
