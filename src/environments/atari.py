@@ -26,6 +26,11 @@ class AtariConfig:
     REWARD_CLIPPING: bool = False
 
 @dataclass(frozen=True)
+class RealAtariConfigV1(AtariConfig):
+    # First version of real Atari
+    LIMITED_ACTION_SPACE: bool = False
+
+@dataclass(frozen=True)
 class ClassicAtariConfig(AtariConfig):
     # Original DQN settings (DQN Zoo)
     STICKY_ACTIONS: float = 0.0
@@ -33,14 +38,15 @@ class ClassicAtariConfig(AtariConfig):
     ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 @dataclass(frozen=True)
+class EPRAtariConfig(AtariConfig):
+    # Endpoint replay settings
+    ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
+
+@dataclass(frozen=True)
 class RevisitingALEConfig(AtariConfig):
     # revisiting ALE recommendations (using frameskip 4 instead of 5 on purpose)
     MAX_FRAMES_PER_EPISODE: int = 18_000
     LIMITED_ACTION_SPACE: bool = False
-
-@dataclass(frozen=True)
-class EPRAtariConfig(AtariConfig): # Endpoint replay settings
-    ZERO_DISCOUNT_ON_LIFE_LOSS: bool = True
 
 
 class _Box:
