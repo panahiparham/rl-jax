@@ -9,7 +9,7 @@ from components.buffer import (
     n_step_return,
 )
 from components.networks import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
-from components.policy import epsilon_greedy_action
+from components.policy import epsilon_greedy_action, linear_epsilon
 
 __all__ = [
     "Batch",
@@ -22,5 +22,6 @@ __all__ = [
     "TimeStep",
     "build_buffer",
     "epsilon_greedy_action",
+    "linear_epsilon",
     "n_step_return",
 ]

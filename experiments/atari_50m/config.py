@@ -22,7 +22,7 @@ _DQN_HYPERS = {
     "GAMMA": 0.99,
     "EPSILON_START": 1.0,
     "EPSILON_END": 0.01,
-    "EPSILON_FRACTION": 0.05, # Should be 0.02 to match Dopamine.
+    "EPSILON_DECAY_STEPS": 250_000,
     "NETWORK_PRESET": "nature_cnn",
 }
 

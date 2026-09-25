@@ -21,7 +21,7 @@ import pytest
 
 from agents.ddqn import DDQNAgent
 from agents.dqn import DQNAgent
-from components import epsilon_greedy_action
+from components import epsilon_greedy_action, linear_epsilon
 
 
 def test_dqn_and_ddqn_share_one_policy():
@@ -97,3 +97,42 @@ def test_is_jittable():
     )
     assert action.dtype == jnp.int32
     assert 0 <= int(action) < 3
+
+
+# --- linear epsilon schedule --------------------------------------------------
+
+WARMUP, DECAY = 20, 40
+
+
+def _schedule(t, warmup=WARMUP, decay=DECAY):
+    return float(linear_epsilon(jnp.asarray(t), 1.0, 0.1, warmup, decay))
+
+
+@pytest.mark.parametrize("t", [0, WARMUP // 2, WARMUP])
+def test_schedule_holds_start_through_warmup(t):
+    """Epsilon stays at its start value until warmup ends."""
+    assert np.isclose(_schedule(t), 1.0)
+
+
+def test_schedule_decays_linearly_after_warmup():
+    """Halfway through the decay, epsilon is halfway between start and end."""
+    assert np.isclose(_schedule(WARMUP + DECAY // 2), 0.55)
+
+
+@pytest.mark.parametrize("t", [WARMUP + DECAY, WARMUP + 10 * DECAY])
+def test_schedule_holds_end_after_decay(t):
+    """Once the decay finishes, epsilon stays at its end value."""
+    assert np.isclose(_schedule(t), 0.1)
+
+
+def test_schedule_without_decay_steps_switches_at_warmup():
+    """Zero decay steps jump straight from start to end when warmup ends."""
+    assert np.isclose(_schedule(WARMUP, decay=0), 1.0)
+    assert np.isclose(_schedule(WARMUP + 1, decay=0), 0.1)
+
+
+def test_schedule_accepts_traced_hyperparameters():
+    """Swept hypers reach the schedule as traced arrays under jit."""
+    fn = jax.jit(linear_epsilon)
+    epsilon = fn(jnp.asarray(30), 1.0, 0.1, jnp.asarray(20), jnp.asarray(40))
+    assert np.isclose(float(epsilon), 0.775)

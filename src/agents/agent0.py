@@ -16,6 +16,7 @@ from components import (
     QNetworkLN,
     build_buffer,
     epsilon_greedy_action,
+    linear_epsilon,
 )
 
 
@@ -41,7 +42,7 @@ class Agent0Config:
     GAMMA: float = traced(0.99)
     EPSILON_START: float = traced(1.0)
     EPSILON_END: float = traced(0.05)
-    EPSILON_FRACTION: float = traced(0.5)
+    EPSILON_DECAY_STEPS: int = traced(100_000)
     HIDDEN_SIZE: int = 64
     # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
     NETWORK_PRESET: str = "mlp_ln"
@@ -94,20 +95,17 @@ class Agent0Agent:
             t=jnp.asarray(0, jnp.int32),
         )
 
-    def _epsilon(self, t: jax.Array):
-        config = self._config
-        return jnp.maximum(
-            config.EPSILON_END,
-            config.EPSILON_START
-            - (config.EPSILON_START - config.EPSILON_END)
-            * (t / (config.TOTAL_TIMESTEPS * config.EPSILON_FRACTION)),
-        )
-
     def act(self, state: Agent0State, key: jax.Array, obs: jax.Array):
+        config = self._config
         q_values = state.q(obs)
-        return epsilon_greedy_action(
-            q_values, self._epsilon(state.t), q_values.shape[-1], key
+        epsilon = linear_epsilon(
+            state.t,
+            config.EPSILON_START,
+            config.EPSILON_END,
+            config.LEARNING_STARTS,
+            config.EPSILON_DECAY_STEPS,
         )
+        return epsilon_greedy_action(q_values, epsilon, q_values.shape[-1], key)
 
     def _train_step(self, state: Agent0State, key: jax.Array):
         """One gradient step on the masked n-step TD loss, bootstrapping off

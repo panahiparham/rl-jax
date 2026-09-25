@@ -66,7 +66,7 @@ EXPERIMENT = Experiment(
                     GAMMA=0.99,                      # json: GAMMA
                     EPSILON_START=1.0,               # json: EPSILON_START
                     EPSILON_END=0.01,                # json: EPSILON_END
-                    EPSILON_FRACTION=0.05,           # json: EPSILON_FRACTION
+                    EPSILON_DECAY_STEPS=250_000,
                     NETWORK_PRESET="nature_cnn",     # json: NETWORK_PRESET
                 ),
                 ENV_HYPERS=_ATARI_PONG,
