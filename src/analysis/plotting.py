@@ -138,6 +138,14 @@ def interp_on_grid(
     return np.interp(grid, ends, rets, left=np.nan, right=np.nan)
 
 
+def _run_ids(
+    experiment: Experiment, component: str, run_ids: Sequence[str] | None
+) -> list[str]:
+    if run_ids is not None:
+        return list(run_ids)
+    return load_runs(experiment, component)["run_id"].to_list()
+
+
 def _interp_stack_for(
     experiment: Experiment,
     component: str,
@@ -155,13 +163,8 @@ def _interp_stack_for(
     in which case ``run_ids`` restricts to one sweep point's runs. Returns an
     ``[n_seeds, len(grid)]`` array, one row per run.
     """
-    ids = (
-        list(run_ids)
-        if run_ids is not None
-        else load_runs(experiment, component)["run_id"].to_list()
-    )
     grids: list[NDArray[np.float64]] = []
-    for rid in ids:
+    for rid in _run_ids(experiment, component, run_ids):
         xs, ys = curve_fn(load_result(experiment, component, rid))
         grids.append(interp_on_grid(xs, ys, grid))
     return np.vstack(grids) if grids else np.empty((0, len(grid)))
