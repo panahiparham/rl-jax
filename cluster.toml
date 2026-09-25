@@ -48,3 +48,12 @@ mem_per_cpu = "8G"
 time = "2:59:00"
 gpus = 1
 mem_per_cpu = "8G"
+
+# Five packed runs (parallel_shards=5) share one GPU through CUDA MPS, with a
+# CPU each.
+[experiments.atari_100k]
+time = "00:59:00"
+gpus = 1
+mps = true
+cpus_per_task = 5
+mem_per_cpu = "4G"
