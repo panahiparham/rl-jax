@@ -42,7 +42,7 @@ class DQNConfig:
     GAMMA: float = traced(0.99)
     EPSILON_START: float = traced(1.0)
     EPSILON_END: float = traced(0.05)
-    EPSILON_FRACTION: float = traced(0.5)
+    EPSILON_DECAY_STEPS: int = traced(100_000)
     HIDDEN_SIZE: int = 64
     # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
     NETWORK_PRESET: str = "mlp"
@@ -104,7 +104,8 @@ class DQNAgent:
             state.t,
             config.EPSILON_START,
             config.EPSILON_END,
-            config.TOTAL_TIMESTEPS * config.EPSILON_FRACTION,
+            config.LEARNING_STARTS,
+            config.EPSILON_DECAY_STEPS,
         )
         return epsilon_greedy_action(q_values, epsilon, q_values.shape[-1], key)
 

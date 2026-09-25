@@ -14,6 +14,11 @@ def epsilon_greedy_action(
 
 
 def linear_epsilon(
-    t: jax.Array, start: Scalar, end: Scalar, decay_steps: Scalar
+    t: jax.Array,
+    start: Scalar,
+    end: Scalar,
+    warmup_steps: Scalar,
+    decay_steps: Scalar,
 ) -> jax.Array:
-    return jnp.maximum(end, start - (start - end) * (t / decay_steps))
+    progress = (t - warmup_steps) / jnp.maximum(decay_steps, 1)
+    return start + (end - start) * jnp.clip(progress, 0.0, 1.0)

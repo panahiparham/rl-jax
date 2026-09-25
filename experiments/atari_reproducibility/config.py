@@ -26,7 +26,7 @@ _DQN_HYPERS = {
     "GAMMA": 0.99,
     "EPSILON_START": 1.0,
     "EPSILON_END": 0.01,
-    "EPSILON_FRACTION": 0.1,
+    "EPSILON_DECAY_STEPS": 250_000,
     "NETWORK_PRESET": "nature_cnn",
 }
 

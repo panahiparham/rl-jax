@@ -400,7 +400,7 @@ def test_dqn_nature_cnn_jit_smoke():
             LEARNING_STARTS=10,
             TRAIN_FREQUENCY=2,
             TARGET_NETWORK_FREQUENCY=20,
-            EPSILON_FRACTION=0.5,
+            EPSILON_DECAY_STEPS=60,
             NETWORK_PRESET="nature_cnn",
         )
     )
