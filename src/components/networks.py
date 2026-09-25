@@ -36,9 +36,9 @@ class QNetwork(eqx.Module):
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
-        self.layer1 = eqx.nn.Linear(obs_dim, hidden_size, key=k1)
-        self.layer2 = eqx.nn.Linear(hidden_size, hidden_size, key=k2)
-        self.layer3 = eqx.nn.Linear(hidden_size, action_dim, key=k3)
+        self.layer1 = _linear(obs_dim, hidden_size, key=k1)
+        self.layer2 = _linear(hidden_size, hidden_size, key=k2)
+        self.layer3 = _linear(hidden_size, action_dim, key=k3)
 
     def __call__(self, x: jax.Array):
         x = jnp.ravel(x)
@@ -58,11 +58,11 @@ class QNetworkLN(eqx.Module):
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
-        self.layer1 = eqx.nn.Linear(obs_dim, hidden_size, key=k1)
+        self.layer1 = _linear(obs_dim, hidden_size, key=k1)
         self.ln1 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
-        self.layer2 = eqx.nn.Linear(hidden_size, hidden_size, key=k2)
+        self.layer2 = _linear(hidden_size, hidden_size, key=k2)
         self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
-        self.layer3 = eqx.nn.Linear(hidden_size, action_dim, key=k3)
+        self.layer3 = _linear(hidden_size, action_dim, key=k3)
 
     def __call__(self, x: jax.Array):
         x = jnp.ravel(x)
