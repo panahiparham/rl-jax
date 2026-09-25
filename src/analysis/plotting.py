@@ -30,8 +30,8 @@ band:
 * :func:`min_max_normalize` - one environment's curves or scalars rescaled onto
   ``[0, 1]`` with shared bounds, so stacks from different environments can be
   pooled into one aggregate.
-* :func:`plot_mean_ci` / :func:`style` - draw a band + mean line, and shared
-  axes styling.
+* :func:`plot_mean_ci` / :func:`plot_median_ti` / :func:`style` - draw a band +
+  center line, and shared axes styling.
 """
 
 from __future__ import annotations
@@ -371,6 +371,25 @@ def plot_mean_ci(
     ax.fill_between(grid[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)  # band
     ax.plot(grid[m], mean[m], lw=2.5, color=color, label=label)  # thick mean
     return mean
+
+
+def plot_median_ti(
+    ax: Axes,
+    grid: NDArray[np.float64],
+    stack: ArrayLike,
+    label: str,
+    color: str,
+) -> NDArray[np.float64]:
+    """Draw a median line and its shaded 95%/95% tolerance band onto an axis.
+
+    Returns the plotted ``median`` array. The band is masked to where every
+    run is present.
+    """
+    median, ti_lo, ti_hi = median_tolerance_interval(stack)
+    m = ~np.isnan(median)
+    ax.fill_between(grid[m], ti_lo[m], ti_hi[m], color=color, alpha=0.2)  # band
+    ax.plot(grid[m], median[m], lw=2.5, color=color, label=label)  # thick median
+    return median
 
 
 def style(
