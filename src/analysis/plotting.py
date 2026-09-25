@@ -24,8 +24,14 @@ band:
   per-timestep (not collapsed) version, feeding :func:`ema_reward_grids_for`.
 * :func:`mean_over_seeds` / :func:`bootstrap_mean_ci` - pointwise aggregates, defined
   only where *every* seed contributes (so the mean is always over the same seeds).
-* :func:`plot_mean_ci` / :func:`style` - draw a band + mean line, and shared
-  axes styling.
+* :func:`median_tolerance_interval` - a pointwise median and nonparametric
+  tolerance interval over runs, showing how widely individual runs vary rather
+  than how certain the mean is.
+* :func:`min_max_normalize` - one environment's curves or scalars rescaled onto
+  ``[0, 1]`` with shared bounds, so stacks from different environments can be
+  pooled into one aggregate.
+* :func:`plot_mean_ci` / :func:`plot_median_ti` / :func:`style` - draw a band +
+  center line, and shared axes styling.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from experiment.design import Experiment
 from experiment.results import load_result, load_runs
 from matplotlib.axes import Axes
 from numpy.typing import ArrayLike, NDArray
+from scipy.stats import binom
 
 CurveFn = Callable[[dict[str, Any]], tuple[NDArray[np.float64], NDArray[np.float64]]]
 MetricFn = Callable[[dict[str, Any]], float]
@@ -275,6 +282,47 @@ def mean_over_seeds(stack: ArrayLike) -> NDArray[np.float64]:
     return mean
 
 
+def median_tolerance_interval(
+    stack: ArrayLike, coverage: float = 0.95, confidence: float = 0.95
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Median and tolerance interval over runs at each point.
+
+    Returns a ``(median, ti_lo, ti_hi)`` triple, NaN wherever not every run is
+    present. The interval is a pair of order statistics that covers at least
+    ``coverage`` of the run distribution with probability ``confidence``. Too
+    few runs (93 for 95%/95%) cannot reach that confidence; the interval then
+    falls back to the runs' min and max.
+    """
+    stack = np.asarray(stack, dtype=float)
+    n, m = stack.shape
+    valid = (~np.isnan(stack)).sum(axis=0) == n
+    median = np.full(m, np.nan)
+    ti_lo = np.full(m, np.nan)
+    ti_hi = np.full(m, np.nan)
+
+    # [r-th smallest, r-th largest] covers >= coverage with probability
+    # P(Binomial(n, coverage) <= n - 2r).
+    trimmed = max((n - int(binom.ppf(confidence, n, coverage))) // 2 - 1, 0)
+    ordered = np.sort(stack[:, valid], axis=0)
+    median[valid] = np.median(ordered, axis=0)
+    ti_lo[valid] = ordered[trimmed]
+    ti_hi[valid] = ordered[n - 1 - trimmed]
+    return median, ti_lo, ti_hi
+
+
+def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
+    """Rescale one environment's arrays onto ``[0, 1]`` with shared bounds.
+
+    Pass every array measured on the same environment - e.g. each agent's
+    seed stack - so they share its lowest and highest observed value and stay
+    comparable. NaNs are ignored when finding the bounds and stay NaN.
+    """
+    values = [np.asarray(a, dtype=float) for a in arrays]
+    low = min(np.nanmin(v) for v in values)
+    high = max(np.nanmax(v) for v in values)
+    return [(v - low) / (high - low) for v in values]
+
+
 def bootstrap_mean_ci(
     stack: ArrayLike,
     n_boot: int = 10_000,
@@ -323,6 +371,25 @@ def plot_mean_ci(
     ax.fill_between(grid[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)  # band
     ax.plot(grid[m], mean[m], lw=2.5, color=color, label=label)  # thick mean
     return mean
+
+
+def plot_median_ti(
+    ax: Axes,
+    grid: NDArray[np.float64],
+    stack: ArrayLike,
+    label: str,
+    color: str,
+) -> NDArray[np.float64]:
+    """Draw a median line and its shaded 95%/95% tolerance band onto an axis.
+
+    Returns the plotted ``median`` array. The band is masked to where every
+    run is present.
+    """
+    median, ti_lo, ti_hi = median_tolerance_interval(stack)
+    m = ~np.isnan(median)
+    ax.fill_between(grid[m], ti_lo[m], ti_hi[m], color=color, alpha=0.2)  # band
+    ax.plot(grid[m], median[m], lw=2.5, color=color, label=label)  # thick median
+    return median
 
 
 def style(
