@@ -25,9 +25,7 @@ Atari needs the optional `atari` extra with ale-py's PR-#707 XLA build:
 
 ## Scale ⚠️
 
-Faithful to the json this is **cluster-scale** - 5M agent steps. `dqn_pong`'s
-`BUFFER_SIZE` is 100k rather than the json's 1M: obs+next_obs at (84,84,4) uint8
-would need ~56GB at 1M, more than a Vulcan L40S's 48GB. It is meant for
+Faithful to the json this is **cluster-scale** - 5M agent steps. It is meant for
 **Linux-CUDA**, not a laptop. Atari's ale-py env can't be `jax.vmap`'d,
 so `src/main.py` reads that from the environment registry and runs the shard's
 runs one at a time; the component sets `shard_size=1` (one env + buffer per

@@ -14,10 +14,8 @@ function sees that in the environment registry and runs the shard's runs one at 
 time; ``shard_size=1`` keeps it to one ~GB-scale replay buffer per process.
 
 ⚠️ Faithful to the json this is **cluster-scale** (5M steps) - meant for Linux-CUDA,
-not a laptop. ``dqn_pong``'s ``BUFFER_SIZE`` is 100k rather than the json's 1M: a
-1M×(84,84,4) uint8 replay needs ~56GB obs+next_obs, more than a Vulcan L40S's 48GB.
-Needs the ``atari`` extra; see ``scripts/install_ale_wheel.sh``. For a quick
-local check, override on the CLI:
+not a laptop. Needs the ``atari`` extra; see ``scripts/install_ale_wheel.sh``. For a
+quick local check, override on the CLI:
     uv run python experiments/atari_20m/run.py single --component dqn_pong --seed 0 \\
         --set AGENT_HYPERS.TOTAL_TIMESTEPS=300 --set AGENT_HYPERS.BUFFER_SIZE=1000
 """
@@ -52,7 +50,7 @@ EXPERIMENT = Experiment(
                     TOTAL_TIMESTEPS=5_000_000,       # json: TOTAL_TIMESTEPS
                     LR=6.25e-05,                     # json: metaParameters.LR
                     ADAM_EPS=1.5e-4,                 # json: metaParameters.ADAM_EPS
-                    BUFFER_SIZE=100_000,
+                    BUFFER_SIZE=1_000_000,
                     BATCH_SIZE=32,                   # json: BATCH_SIZE
                     LEARNING_STARTS=20_000,          # json: LEARNING_STARTS
                     TRAIN_FREQUENCY=4,               # json: TRAIN_FREQUENCY
