@@ -24,6 +24,9 @@ band:
   per-timestep (not collapsed) version, feeding :func:`ema_reward_grids_for`.
 * :func:`mean_over_seeds` / :func:`bootstrap_mean_ci` - pointwise aggregates, defined
   only where *every* seed contributes (so the mean is always over the same seeds).
+* :func:`min_max_normalize` - one environment's curves or scalars rescaled onto
+  ``[0, 1]`` with shared bounds, so stacks from different environments can be
+  pooled into one aggregate.
 * :func:`plot_mean_ci` / :func:`style` - draw a band + mean line, and shared
   axes styling.
 """
@@ -273,6 +276,19 @@ def mean_over_seeds(stack: ArrayLike) -> NDArray[np.float64]:
         mean = np.nanmean(stack, axis=0)
     mean[(~np.isnan(stack)).sum(axis=0) < stack.shape[0]] = np.nan
     return mean
+
+
+def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
+    """Rescale one environment's arrays onto ``[0, 1]`` with shared bounds.
+
+    Pass every array measured on the same environment - e.g. each agent's
+    seed stack - so they share its lowest and highest observed value and stay
+    comparable. NaNs are ignored when finding the bounds and stay NaN.
+    """
+    values = [np.asarray(a, dtype=float) for a in arrays]
+    low = min(np.nanmin(v) for v in values)
+    high = max(np.nanmax(v) for v in values)
+    return [(v - low) / (high - low) for v in values]
 
 
 def bootstrap_mean_ci(
