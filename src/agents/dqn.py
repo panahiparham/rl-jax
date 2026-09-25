@@ -16,6 +16,7 @@ from components import (
     QNetworkLN,
     build_buffer,
     epsilon_greedy_action,
+    linear_epsilon,
 )
 
 
@@ -96,20 +97,16 @@ class DQNAgent:
             t=jnp.asarray(0, jnp.int32),
         )
 
-    def _epsilon(self, t: jax.Array):
-        config = self._config
-        return jnp.maximum(
-            config.EPSILON_END,
-            config.EPSILON_START
-            - (config.EPSILON_START - config.EPSILON_END)
-            * (t / (config.TOTAL_TIMESTEPS * config.EPSILON_FRACTION)),
-        )
-
     def act(self, state: DQNState, key: jax.Array, obs: jax.Array):
+        config = self._config
         q_values = state.q(obs)
-        return epsilon_greedy_action(
-            q_values, self._epsilon(state.t), q_values.shape[-1], key
+        epsilon = linear_epsilon(
+            state.t,
+            config.EPSILON_START,
+            config.EPSILON_END,
+            config.TOTAL_TIMESTEPS * config.EPSILON_FRACTION,
         )
+        return epsilon_greedy_action(q_values, epsilon, q_values.shape[-1], key)
 
     def _train_step(self, state: DQNState, key: jax.Array):
         """One gradient step on the masked n-step TD loss."""
