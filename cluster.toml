@@ -11,7 +11,7 @@ root = "$adam/rl-jax"
 account = "aip-mbowling"
 
 [venvs]
-cpu = ["atari"]
+cpu = []
 gpu = ["cuda", "atari"]
 
 # default slurm settings.
