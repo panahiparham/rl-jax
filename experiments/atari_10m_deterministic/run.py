@@ -2,8 +2,11 @@ import os
 import sys
 from pathlib import Path
 
+# Deterministic GPU kernels make same-seed runs reproduce exactly.
 os.environ["XLA_FLAGS"] = (
-    os.environ.get("XLA_FLAGS", "") + " --xla_cpu_multi_thread_eigen=false"
+    os.environ.get("XLA_FLAGS", "")
+    + " --xla_cpu_multi_thread_eigen=false"
+    + " --xla_gpu_deterministic_ops=true"
 ).strip()
 # Parallel shards share one GPU; preallocating would give the first process
 # most of its memory.

@@ -38,7 +38,7 @@ _DQN_HYPERS = {
 }
 
 EXPERIMENT = Experiment(
-    name="atari_10m",
+    name="atari_10m_deterministic",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
         Component(

@@ -3,23 +3,10 @@ from pathlib import Path
 from experiment.design import Component, Experiment, SlurmResources
 
 from agents.dqn import DQNConfig
-from environments.atari import AtariConfig
+from environments.atari import RevisitingALEConfig
 from main import ExperimentConfig
 
-_GAMES = [
-    "pong",
-    "breakout",
-    "seaquest",
-    "centipede",
-    "ms_pacman",
-    "beam_rider",
-    "space_invaders",
-    "battle_zone",
-    "double_dunk",
-    "name_this_game",
-    "phoenix",
-    "qbert",
-]
+_GAMES = ["battle_zone", "ms_pacman"]
 
 _DQN_HYPERS = {
     "TOTAL_TIMESTEPS": 2_500_000,       # 10M frames at FRAMESKIP=4
@@ -37,8 +24,15 @@ _DQN_HYPERS = {
     "NETWORK_PRESET": "nature_cnn",
 }
 
+_ATARI = RevisitingALEConfig()
+
+_REAL_ATARI = RevisitingALEConfig(
+    LIMITED_ACTION_SPACE=False,
+    NOOP_MAX=0,
+)
+
 EXPERIMENT = Experiment(
-    name="atari_10m",
+    name="atari_10m_old",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
         Component(
@@ -47,15 +41,24 @@ EXPERIMENT = Experiment(
                 AGENT="dqn",
                 ENV="atari",
                 AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
-                ENV_HYPERS=AtariConfig(),
+                ENV_HYPERS=_ATARI,
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=[0],
+            seeds=[0, 1, 2],
             shard_size=1,
-            parallel_shards=5,  # five runs fit in one L40S
+        ),
+        Component(
+            name="dqn_real_atari",
+            config=ExperimentConfig(
+                AGENT="dqn",
+                ENV="atari",
+                AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=False),
+                ENV_HYPERS=_REAL_ATARI,
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=[0, 1, 2],
+            shard_size=1,
         ),
     ],
-    # Five packed runs (parallel_shards=5) share one GPU through CUDA MPS,
-    # with a CPU each.
-    slurm=SlurmResources(time="02:59:00", gpus=1, mps=True, cpus_per_task=5),
+    slurm=SlurmResources(time="2:59:00", gpus=1, mem_per_cpu="8G"),
 )
