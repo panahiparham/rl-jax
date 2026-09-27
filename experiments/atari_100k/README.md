@@ -14,7 +14,7 @@ Atari's ale-py env can't be `jax.vmap`'d, so each run is its own shard
 
 * `parallel_shards=5` in `config.py` - each worker runs 5 shards at the same
   time, each in its own process.
-* `mps = true` in `cluster.toml` - the job starts a CUDA MPS server, so the
+* `mps=True` in `config.py`'s `slurm` - the job starts a CUDA MPS server, so the
   processes' kernels run on the GPU concurrently instead of taking turns.
 * `XLA_PYTHON_CLIENT_PREALLOCATE=false` in `run.py` - each process takes only
   the GPU memory it needs, instead of most of the GPU.
