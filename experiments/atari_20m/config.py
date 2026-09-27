@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from experiment.design import Component, Experiment
+from experiment.design import Component, Experiment, SlurmResources
 
 from agents.dqn import DQNConfig
 from environments.atari import RevisitingALEConfig
@@ -67,4 +67,5 @@ EXPERIMENT = Experiment(
             shard_size=1,  # one env, and one replay buffer, per process
         ),
     ],
+    slurm=SlurmResources(time="02:59:00", gpus=1, mem_per_cpu="8G"),
 )

@@ -36,9 +36,8 @@ environment registry and runs the shard's runs one at a time; both components se
 with `--num-workers`.
 
 **No mid-run checkpointing.** A component's whole run is one `jax.lax.scan` -
-there is no partial result if a job times out or is preempted. `cluster.toml`'s
-`atari_200m` time budget is sized with that failure mode in mind (see the comment
-there for the throughput extrapolation and bucket trade-off).
+there is no partial result if a job times out or is preempted. The time budget in
+`config.py`'s `slurm` is sized with that failure mode in mind.
 
 Also note: on **macOS-CPU** the ale-py XLA FFI can intermittently segfault at
 episode boundaries under the DQN graph (stable on Linux-CUDA).

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from experiment.design import Component, Experiment
+from experiment.design import Component, Experiment, SlurmResources
 
 from agents.agent0 import Agent0Config
 from agents.dqn import DQNConfig
@@ -94,4 +94,5 @@ EXPERIMENT = Experiment(
             shard_size=1,
         ),
     ],
+    slurm=SlurmResources(time="11:59:00", gpus=1, mem_per_cpu="8G"),
 )
