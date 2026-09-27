@@ -4,24 +4,12 @@ from experiment.design import Component, Experiment, SlurmResources
 
 from agents.agent0 import Agent0Config
 from agents.dqn import DQNConfig
-from environments.atari import AtariConfig
+from environments.atari import RevisitingALEConfig
 from main import ExperimentConfig
 
-_GAMES = [
-    "pong",
-    "breakout",
-    "seaquest",
-    "centipede",
-    "ms_pacman",
-    "beam_rider",
-    "space_invaders",
-    "battle_zone",
-    "double_dunk",
-    "name_this_game",
-    "phoenix",
-    "qbert",
-]
+_GAMES = ["battle_zone", "pong", "breakout", "ms_pacman"]
 
+# Shared by both components; REWARD_CLIP is the one hyper that varies per component.
 _DQN_HYPERS = {
     "TOTAL_TIMESTEPS": 12_500_000,      # 50M frames at FRAMESKIP=4
     "LR": 6.25e-05,
@@ -38,14 +26,23 @@ _DQN_HYPERS = {
     "NETWORK_PRESET": "nature_cnn",
 }
 
-# Agent0 has no target network and uses the LN variant of the Nature CNN.
+# Agent0 has no TARGET_NETWORK_FREQUENCY (no target network) and uses the
+# LN variant of the Nature CNN; derive its hypers from the same source of
+# truth minus that field, with NETWORK_PRESET overridden.
 _AGENT0_HYPERS = {
     **{k: v for k, v in _DQN_HYPERS.items() if k != "TARGET_NETWORK_FREQUENCY"},
     "NETWORK_PRESET": "nature_cnn_ln",
 }
 
+_ATARI = RevisitingALEConfig()
+
+_REAL_ATARI = RevisitingALEConfig(
+    LIMITED_ACTION_SPACE=False,
+    NOOP_MAX=0,
+)
+
 EXPERIMENT = Experiment(
-    name="atari_50m",
+    name="atari_50m_old",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
         Component(
@@ -54,12 +51,23 @@ EXPERIMENT = Experiment(
                 AGENT="dqn",
                 ENV="atari",
                 AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
-                ENV_HYPERS=AtariConfig(),
+                ENV_HYPERS=_ATARI,
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
             seeds=[0],
             shard_size=1,
-            parallel_shards=5,  # five runs fit in one L40S
+        ),
+        Component(
+            name="dqn_real_atari",
+            config=ExperimentConfig(
+                AGENT="dqn",
+                ENV="atari",
+                AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=False),
+                ENV_HYPERS=_REAL_ATARI,
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=[0],
+            shard_size=1,
         ),
         Component(
             name="agent0_atari",
@@ -67,16 +75,24 @@ EXPERIMENT = Experiment(
                 AGENT="agent0",
                 ENV="atari",
                 AGENT_HYPERS=Agent0Config(**_AGENT0_HYPERS, REWARD_CLIP=True),
-                ENV_HYPERS=AtariConfig(),
+                ENV_HYPERS=_ATARI,
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
             seeds=[0],
             shard_size=1,
-            parallel_shards=5,
+        ),
+        Component(
+            name="agent0_real_atari",
+            config=ExperimentConfig(
+                AGENT="agent0",
+                ENV="atari",
+                AGENT_HYPERS=Agent0Config(**_AGENT0_HYPERS, REWARD_CLIP=False),
+                ENV_HYPERS=_REAL_ATARI,
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=[0],
+            shard_size=1,
         ),
     ],
-    # Five packed runs (parallel_shards=5) share one GPU through CUDA MPS,
-    # with a CPU each.
-    # atari_10m's packed runs took about 1h, so 50M frames need about 5.5h.
-    slurm=SlurmResources(time="11:59:00", gpus=1, mps=True, cpus_per_task=5),
+    slurm=SlurmResources(time="11:59:00", gpus=1, mem_per_cpu="8G"),
 )
