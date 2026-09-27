@@ -113,13 +113,6 @@ time = "01:00:00"
 cpus_per_task = 1
 mem_per_cpu = "4G"
 gpus = 0
-
-[experiments.gpu_toy]
-gpus = 2
-time = "12:00:00"
-
-[experiments.acct_toy]
-account = "acct-test"
 """
 
 SBATCH_STUB = """\

@@ -299,14 +299,13 @@ def test_single_dispatches_one_job(sandbox: Sandbox):
 
 
 def test_gpu_experiment_uses_the_gpu_venv_and_asks_for_gpus(sandbox: Sandbox):
-    """Per-experiment overrides in cluster.toml select resources and the venv."""
+    """An experiment's slurm overrides select resources and the venv."""
     setup_cluster(sandbox)
-    # Relabel the toy experiment so [experiments.gpu_toy] applies to it.
     run_py_path = sandbox.repo / "experiments" / "toy" / "run.py"
-    run_py_path.write_text(
-        run_py_path.read_text().replace('name="toy"', 'name="gpu_toy"')
-    )
-    _commit(sandbox.repo, "gpu label")
+    run_py_path.write_text(run_py_path.read_text().replace(
+        'name="toy",', 'name="toy",\n    slurm={"gpus": 2, "time": "12:00:00"},'
+    ))
+    _commit(sandbox.repo, "gpu resources")
 
     run_py(sandbox, "sweep", "--num-workers", "2", "--slurm")
 
@@ -323,13 +322,13 @@ def test_gpu_experiment_uses_the_gpu_venv_and_asks_for_gpus(sandbox: Sandbox):
 
 
 def test_per_experiment_account_override_beats_the_default(sandbox: Sandbox):
-    """[experiments.<label>] account overrides [cluster] account for that label only."""
+    """An experiment's slurm account overrides the [cluster] account."""
     setup_cluster(sandbox)
     run_py_path = sandbox.repo / "experiments" / "toy" / "run.py"
-    run_py_path.write_text(
-        run_py_path.read_text().replace('name="toy"', 'name="acct_toy"')
-    )
-    _commit(sandbox.repo, "acct label")
+    run_py_path.write_text(run_py_path.read_text().replace(
+        'name="toy",', 'name="toy",\n    slurm={"account": "acct-test"},'
+    ))
+    _commit(sandbox.repo, "acct resources")
 
     run_py(sandbox, "sweep", "--num-workers", "2", "--slurm")
 
@@ -349,15 +348,15 @@ def test_dry_run_submits_nothing_and_leaves_no_run_dir(sandbox: Sandbox):
     assert "--dependency=afterok:" in proc.stdout
 
 
-def test_status_is_local_and_refuses_slurm(sandbox: Sandbox):
-    """status answers from the results dir; queue is the cluster question."""
+def test_status_with_slurm_reports_resources_without_dispatching(sandbox: Sandbox):
+    """status --slurm adds what a dispatch would request, but stays local."""
     setup_cluster(sandbox)
     before = sandbox.sbatch_calls()
 
     assert "2 run(s)" in run_py(sandbox, "status").stdout
 
-    proc = run_py(sandbox, "status", "--slurm", expect_ok=False)
-    assert "runs here, not on the cluster" in proc.stderr
+    proc = run_py(sandbox, "status", "--slurm")
+    assert "[toy] cpu venv: --account=def-test --time=01:00:00" in proc.stdout
     assert sandbox.sbatch_calls() == before, "status must not submit anything"
     assert sandbox.run_dirs == [], "status must not snapshot anything"
 
