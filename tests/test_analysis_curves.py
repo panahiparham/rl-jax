@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from analysis.curves import ema, return_curve
+from analysis.curves import ema, lifetime_average, return_curve
 
 # --- ema ----------------------------------------------------------------------
 
@@ -77,3 +79,55 @@ def test_return_curve_of_a_stack_matches_each_run_alone():
     for row in range(4):
         expected = return_curve(reward[row], done[row])
         assert np.array_equal(curve[row], expected, equal_nan=True)
+
+
+# --- lifetime_average ---------------------------------------------------------
+
+
+def _episode_weighted_return(reward, done):
+    weighted, steps, episode_return, episode_length = 0.0, 0, 0.0, 0
+    for step_reward, step_done in zip(reward, done, strict=True):
+        episode_return += step_reward
+        episode_length += 1
+        if step_done:
+            weighted += episode_return * episode_length
+            steps += episode_length
+            episode_return, episode_length = 0.0, 0
+    return weighted / steps if steps else np.nan
+
+
+def test_lifetime_average_weights_episodes_by_length():
+    """A 3-step episode returning 3 outweighs a 1-step episode returning 7."""
+    reward = [1.0, 1.0, 1.0, 7.0]
+    done = [0, 0, 1, 1]
+    assert np.isclose(lifetime_average(return_curve(reward, done)), (9 + 7) / 4)
+
+
+@settings(derandomize=True)
+@given(
+    st.lists(
+        st.tuples(st.floats(-10, 10), st.booleans()), min_size=1, max_size=40
+    )
+)
+def test_lifetime_average_of_a_return_curve_is_the_episode_weighted_return(steps):
+    """For any run, it equals sum(return * length) / sum(length) over the
+    completed episodes, ignoring an unfinished last one."""
+    reward, done = zip(*steps, strict=True)
+    expected = _episode_weighted_return(reward, done)
+    actual = lifetime_average(return_curve(reward, done))
+    assert np.isclose(actual, expected, equal_nan=True)
+
+
+def test_lifetime_average_of_reward_is_the_average_reward():
+    """On raw reward, as for a continuing task, it is the mean reward rate."""
+    reward = np.random.default_rng(0).normal(size=(3, 20))
+    assert np.allclose(lifetime_average(reward), reward.mean(axis=-1))
+
+
+def test_lifetime_average_is_nan_for_a_run_with_no_defined_step():
+    """A run that finished no episode has no lifetime return, next to one that
+    did."""
+    curve = return_curve([[1.0, 1.0], [1.0, 1.0]], [[0, 0], [0, 1]])
+    averages = lifetime_average(curve)
+    assert np.isnan(averages[0])
+    assert averages[1] == 2.0
