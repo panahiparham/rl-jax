@@ -24,14 +24,8 @@ band:
   idea for a continuing task (e.g. Catch), which has no episode to derive a return
   from: mean reward rate over the whole run instead. :func:`ema_reward` is its
   per-timestep (not collapsed) version, feeding :func:`ema_reward_grids_for`.
-* :func:`mean_over_seeds` / :func:`bootstrap_mean_ci` - pointwise aggregates, defined
-  only where *every* seed contributes (so the mean is always over the same seeds).
-* :func:`median_tolerance_interval` - a pointwise median and nonparametric
-  tolerance interval over runs, showing how widely individual runs vary rather
-  than how certain the mean is.
-* :func:`min_max_normalize` - one environment's curves or scalars rescaled onto
-  ``[0, 1]`` with shared bounds, so stacks from different environments can be
-  pooled into one aggregate.
+* :func:`mean_over_seeds` - a pointwise mean, defined only where *every* seed
+  contributes (so the mean is always over the same seeds).
 * :func:`plot_mean_ci` / :func:`plot_median_ti` / :func:`style` - draw a band +
   center line, and shared axes styling.
 * :func:`plot_bars_mean_ci` - one bar per group of per-run scalars (e.g. lifetime
@@ -50,7 +44,8 @@ from experiment.design import Experiment
 from experiment.results import load_result, load_runs
 from matplotlib.axes import Axes
 from numpy.typing import ArrayLike, NDArray
-from scipy.stats import binom
+
+from analysis.stats import bootstrap_mean_ci, median_tolerance_interval
 
 CurveFn = Callable[[dict[str, Any]], tuple[NDArray[np.float64], NDArray[np.float64]]]
 MetricFn = Callable[[dict[str, Any]], float]
@@ -305,75 +300,10 @@ def mean_over_seeds(stack: ArrayLike) -> NDArray[np.float64]:
     return mean
 
 
-def median_tolerance_interval(
-    stack: ArrayLike, coverage: float = 0.95, confidence: float = 0.95
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    """Median and tolerance interval over runs at each point.
-
-    Returns a ``(median, ti_lo, ti_hi)`` triple, NaN wherever not every run is
-    present. The interval is a pair of order statistics that covers at least
-    ``coverage`` of the run distribution with probability ``confidence``. Too
-    few runs (93 for 95%/95%) cannot reach that confidence; the interval then
-    falls back to the runs' min and max.
-    """
-    stack = np.asarray(stack, dtype=float)
-    n, m = stack.shape
-    valid = (~np.isnan(stack)).sum(axis=0) == n
-    median = np.full(m, np.nan)
-    ti_lo = np.full(m, np.nan)
-    ti_hi = np.full(m, np.nan)
-
-    # [r-th smallest, r-th largest] covers >= coverage with probability
-    # P(Binomial(n, coverage) <= n - 2r).
-    trimmed = max((n - int(binom.ppf(confidence, n, coverage))) // 2 - 1, 0)
-    ordered = np.sort(stack[:, valid], axis=0)
-    median[valid] = np.median(ordered, axis=0)
-    ti_lo[valid] = ordered[trimmed]
-    ti_hi[valid] = ordered[n - 1 - trimmed]
-    return median, ti_lo, ti_hi
 
 
-def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
-    """Rescale one environment's arrays onto ``[0, 1]`` with shared bounds.
-
-    Pass every array measured on the same environment - e.g. each agent's
-    seed stack - so they share its lowest and highest observed value and stay
-    comparable. NaNs are ignored when finding the bounds and stay NaN.
-    """
-    values = [np.asarray(a, dtype=float) for a in arrays]
-    low = min(np.nanmin(v) for v in values)
-    high = max(np.nanmax(v) for v in values)
-    return [(v - low) / (high - low) for v in values]
 
 
-def bootstrap_mean_ci(
-    stack: ArrayLike,
-    n_boot: int = 10_000,
-    lo: float = 2.5,
-    hi: float = 97.5,
-    seed: int = 0,
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    """Bootstrap a mean and confidence interval over seeds at each timestep.
-
-    Returns a ``(mean, ci_lo, ci_hi)`` triple, NaN wherever not every seed is
-    present. With a single seed the band collapses onto the mean.
-    """
-    stack = np.asarray(stack)
-    n, m = stack.shape
-    valid = (~np.isnan(stack)).sum(axis=0) == n
-    mean = np.full(m, np.nan)
-    ci_lo = np.full(m, np.nan)
-    ci_hi = np.full(m, np.nan)
-    sub = stack[:, valid]  # [n_seeds, n_valid], no NaNs
-    mean[valid] = sub.mean(axis=0)
-    rng = np.random.default_rng(seed)
-    boot = np.empty((n_boot, sub.shape[1]))
-    for s in range(0, n_boot, 1000):  # chunked to bound memory
-        e = min(s + 1000, n_boot)
-        idx = rng.integers(0, n, size=(e - s, n))  # resample seed indices
-        boot[s:e] = sub[idx].mean(axis=1)
-    ci_lo[valid], ci_hi[valid] = np.percentile(boot, [lo, hi], axis=0)
-    return mean, ci_lo, ci_hi
 
 
 def plot_mean_ci(
