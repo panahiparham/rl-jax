@@ -57,6 +57,13 @@ def test_mean_ci_band_widens_with_confidence():
     _, low_99, high_99 = mean_ci(samples, confidence=0.99, n_boot=2000)
     assert low_99 < low_90 < high_90 < high_99
 
+
+@pytest.mark.parametrize("aggregate", [mean_ci, median_ti])
+def test_aggregating_zero_runs_raises(aggregate):
+    """Missing data is skipped before aggregating, never drawn as an empty band."""
+    with pytest.raises(ValueError, match="no runs"):
+        aggregate(np.empty((0, 3)))
+
 # --- min_max_normalize --------------------------------------------------------
 
 

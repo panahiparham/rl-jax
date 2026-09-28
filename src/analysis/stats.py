@@ -24,6 +24,8 @@ class Interval(NamedTuple):
 def _per_point(samples: ArrayLike) -> NDArray[np.float64]:
     """``[n_runs, ...]`` samples as a ``[n_runs, n_points]`` stack."""
     samples = np.asarray(samples, dtype=float)
+    if len(samples) == 0:
+        raise ValueError("no runs to aggregate")
     return samples.reshape(len(samples), -1)
 
 
