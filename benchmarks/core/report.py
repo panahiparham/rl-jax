@@ -17,22 +17,23 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from experiment.design import Experiment
-from experiment.results import load_result, load_runs
 from numpy.typing import NDArray
 
-from analysis.plotting import (
-    ema_reward_grids_for,
-    plot_mean_ci,
-    seed_grids_for,
-    style,
-)
+from analysis.curves import ema, return_curve, subsample
+from analysis.stats import mean_ci
+from main import Results, load_results
 
-__all__ = ["Environment", "Series", "plot_environment", "render_plots"]
+__all__ = [
+    "Environment",
+    "Series",
+    "environment_curves",
+    "plot_environment",
+    "render_plots",
+]
 
 METRIC_RETURN = "return"
 METRIC_REWARD = "reward"
 
-_GRIDS_FOR = {METRIC_RETURN: seed_grids_for, METRIC_REWARD: ema_reward_grids_for}
 _YLABEL = {METRIC_RETURN: "Return", METRIC_REWARD: "Reward\n(EMA)"}
 
 
@@ -56,46 +57,54 @@ class Environment:
     ylim: tuple[float, float] | None = None
 
 
-def _grid_for(
-    experiment: Experiment, component: str, points: int
-) -> NDArray[np.float64]:
-    """A shared [0, total_steps] timestep grid, read off any of the runs."""
-    df = load_runs(experiment, component)
-    total_steps = len(load_result(experiment, component, df["run_id"][0])["reward"])
-    return np.linspace(0, total_steps, points)
+def _signal(runs: Results, metric: str) -> NDArray[np.float64]:
+    if metric == METRIC_REWARD:
+        return ema(runs.reward)
+    return return_curve(runs.reward, runs.done)
+
+
+def environment_curves(
+    experiment: Experiment, environment: Environment, points: int = 500
+) -> list[tuple[Series, NDArray[np.int64], NDArray[np.float64]]]:
+    """Each series' ``(timesteps, per-run curves)``, skipping series with no runs."""
+    curves = []
+    for series in environment.series:
+        runs = load_results(experiment, series.component)
+        if runs is None:
+            continue
+        timesteps, values = subsample(_signal(runs, environment.metric), points)
+        curves.append((series, timesteps, values))
+    return curves
 
 
 def plot_environment(
-    experiment: Experiment,
-    environment: Environment,
-    plots_dir: Path,
-    *,
-    grid_points: int = 500,
+    experiment: Experiment, environment: Environment, plots_dir: Path
 ) -> Path | None:
     """Save one environment's learning curve, a mean +/- 95% CI band per agent.
 
-    Each series gets its own timestep grid, matching
-    ``experiments/tuned/analysis.ipynb``. A series with no completed runs is
-    skipped; an environment with no completed runs at all renders nothing.
+    The same shape as ``experiments/tuned/analysis.ipynb``. An environment with
+    no completed runs at all renders nothing.
     """
-    grids_for = _GRIDS_FOR[environment.metric]
-    drawn = []
-    for series in environment.series:
-        if load_runs(experiment, series.component).is_empty():
-            continue
-        grid = _grid_for(experiment, series.component, grid_points)
-        drawn.append((series, grid, grids_for(experiment, series.component, grid)))
+    drawn = environment_curves(experiment, environment)
     if not drawn:
         return None
 
     fig, ax = plt.subplots(figsize=(9, 6))
-    for series, grid, stack in drawn:
-        plot_mean_ci(ax, grid, stack, series.label, series.color)
-    seeds = min(stack.shape[0] for _, _, stack in drawn)
+    for series, timesteps, values in drawn:
+        mean, low, high = mean_ci(values)
+        ax.fill_between(timesteps, low, high, color=series.color, alpha=0.2)
+        ax.plot(timesteps, mean, lw=2.5, color=series.color, label=series.label)
+    seeds = min(len(values) for _, _, values in drawn)
     ax.set_title(f"{environment.title} ({seeds} seeds, 95% CI)")
     ax.legend(loc="lower right", frameon=False)
-    style(ax, ylim=environment.ylim, ylabel=_YLABEL[environment.metric])
-    ax.set_xticks([0, max(grid[-1] for _, grid, _ in drawn)])
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_xlabel("Timestep")
+    ax.set_ylabel(
+        _YLABEL[environment.metric], rotation=0, ha="right", va="center", labelpad=12
+    )
+    if environment.ylim is not None:
+        ax.set_ylim(*environment.ylim)
+    ax.set_xticks([0, max(timesteps[-1] for _, timesteps, _ in drawn)])
     fig.tight_layout()
 
     plots_dir.mkdir(parents=True, exist_ok=True)
