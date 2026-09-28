@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.signal import lfilter
@@ -43,3 +45,16 @@ def return_curve(reward: ArrayLike, done: ArrayLike) -> NDArray[np.float64]:
         lengths = np.diff(ends, prepend=-1)
         curve[run][: ends[-1] + 1] = np.repeat(returns, lengths)
     return curve
+
+
+def lifetime_average(curve: ArrayLike) -> NDArray[np.float64]:
+    """Each run's curve averaged over its defined timesteps, along the last axis.
+
+    This is the area under the curve per timestep: on a return curve it is the
+    step-weighted mean episode return, and on raw reward the average reward.
+    NaN for a run with no defined timestep.
+    """
+    curve = np.asarray(curve, dtype=float)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)  # all-NaN runs
+        return np.asarray(np.nanmean(curve, axis=-1), dtype=np.float64)
