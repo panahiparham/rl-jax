@@ -49,6 +49,14 @@ def test_mean_ci_keeps_the_trailing_shape_of_its_samples():
     assert center.shape == low.shape == high.shape == (2, 3)
     assert np.allclose(center, samples.mean(axis=0))
 
+
+def test_mean_ci_band_widens_with_confidence():
+    """A higher confidence level asks for a wider bootstrap band."""
+    samples = np.random.default_rng(0).normal(size=20)
+    _, low_90, high_90 = mean_ci(samples, confidence=0.9, n_boot=2000)
+    _, low_99, high_99 = mean_ci(samples, confidence=0.99, n_boot=2000)
+    assert low_99 < low_90 < high_90 < high_99
+
 # --- min_max_normalize --------------------------------------------------------
 
 

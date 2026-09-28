@@ -35,9 +35,8 @@ def _shaped_like(interval: Interval, samples: ArrayLike) -> Interval:
 
 def mean_ci(
     samples: ArrayLike,
+    confidence: float = 0.95,
     n_boot: int = 10_000,
-    lo: float = 2.5,
-    hi: float = 97.5,
     seed: int = 0,
 ) -> Interval:
     """Bootstrap a mean and confidence interval over seeds at each point.
@@ -60,7 +59,8 @@ def mean_ci(
         e = min(s + 1000, n_boot)
         idx = rng.integers(0, n, size=(e - s, n))  # resample seed indices
         boot[s:e] = sub[idx].mean(axis=1)
-    ci_lo[valid], ci_hi[valid] = np.percentile(boot, [lo, hi], axis=0)
+    tail = (100 - 100 * confidence) / 2
+    ci_lo[valid], ci_hi[valid] = np.percentile(boot, [tail, 100 - tail], axis=0)
     return _shaped_like(Interval(mean, ci_lo, ci_hi), samples)
 
 
