@@ -58,3 +58,17 @@ def lifetime_average(curve: ArrayLike) -> NDArray[np.float64]:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)  # all-NaN runs
         return np.asarray(np.nanmean(curve, axis=-1), dtype=np.float64)
+
+
+def subsample(
+    curve: ArrayLike, points: int = 500
+) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    """Up to ``points`` evenly spaced timesteps of a curve, for plotting.
+
+    Returns ``(timesteps, values)``, taken along the last axis. Timesteps count
+    from 1, so the first and last are 1 and the run's length.
+    """
+    curve = np.asarray(curve, dtype=float)
+    spaced = np.linspace(0, curve.shape[-1] - 1, points).round().astype(np.int64)
+    indices = np.unique(spaced)
+    return indices + 1, curve[..., indices]
