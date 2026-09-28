@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from analysis.curves import ema, lifetime_average, return_curve
+from analysis.curves import ema, lifetime_average, return_curve, subsample
 
 # --- ema ----------------------------------------------------------------------
 
@@ -131,3 +131,29 @@ def test_lifetime_average_is_nan_for_a_run_with_no_defined_step():
     averages = lifetime_average(curve)
     assert np.isnan(averages[0])
     assert averages[1] == 2.0
+
+
+# --- subsample ----------------------------------------------------------------
+
+
+def test_subsample_spans_the_whole_run():
+    """The first and last timesteps are always kept, counted from 1."""
+    timesteps, values = subsample(np.arange(1000.0), points=7)
+    assert timesteps[0] == 1
+    assert timesteps[-1] == 1000
+    assert np.array_equal(values, timesteps - 1)
+
+
+def test_subsample_keeps_every_step_of_a_short_run():
+    """Asking for more points than timesteps returns each timestep once."""
+    timesteps, values = subsample([4.0, 5.0, 6.0], points=500)
+    assert np.array_equal(timesteps, [1, 2, 3])
+    assert np.array_equal(values, [4.0, 5.0, 6.0])
+
+
+def test_subsample_picks_the_same_timesteps_for_every_run():
+    """Runs are rows, so a stack shares one set of timesteps."""
+    stack = np.arange(20.0).reshape(2, 10)
+    timesteps, values = subsample(stack, points=4)
+    assert values.shape == (2, len(timesteps))
+    assert np.array_equal(values[1] - values[0], np.full(len(timesteps), 10.0))
