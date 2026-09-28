@@ -65,6 +65,32 @@ def test_aggregating_zero_runs_raises(aggregate):
     with pytest.raises(ValueError, match="no runs"):
         aggregate(np.empty((0, 3)))
 
+
+def test_mean_ci_covers_the_true_mean_at_its_confidence():
+    """Across many independent points, the 95% band holds the true mean about
+    95% of the time."""
+    samples = np.random.default_rng(0).normal(size=(30, 2000))
+    _, low, high = mean_ci(samples, n_boot=2000)
+    coverage = ((low <= 0.0) & (high >= 0.0)).mean()
+    assert 0.9 <= coverage <= 0.98
+
+
+def test_mean_ci_is_nan_where_a_run_is_missing():
+    """The mean is always over the same runs, so a gap in one run leaves the
+    point undefined."""
+    samples = np.ones((3, 4))
+    samples[1, 2] = np.nan
+    for values in mean_ci(samples, n_boot=200):
+        assert np.isnan(values[2])
+        assert not np.isnan(values[[0, 1, 3]]).any()
+
+
+def test_mean_ci_is_reproducible_for_a_seed():
+    """A fixed seed resamples the same runs, so replotting draws the same band."""
+    samples = np.random.default_rng(0).normal(size=(10, 5))
+    first, second = mean_ci(samples, seed=3), mean_ci(samples, seed=3)
+    assert all(np.array_equal(a, b) for a, b in zip(first, second, strict=True))
+
 # --- min_max_normalize --------------------------------------------------------
 
 
