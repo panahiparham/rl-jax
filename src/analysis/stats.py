@@ -6,10 +6,19 @@ Every function takes a stack with one row per run.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import NamedTuple
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.stats import binom
+
+
+class Interval(NamedTuple):
+    """A center line and the band around it, one value per point."""
+
+    center: NDArray[np.float64]
+    low: NDArray[np.float64]
+    high: NDArray[np.float64]
 
 
 def mean_ci(
@@ -18,11 +27,11 @@ def mean_ci(
     lo: float = 2.5,
     hi: float = 97.5,
     seed: int = 0,
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+) -> Interval:
     """Bootstrap a mean and confidence interval over seeds at each timestep.
 
-    Returns a ``(mean, ci_lo, ci_hi)`` triple, NaN wherever not every seed is
-    present. With a single seed the band collapses onto the mean.
+    NaN wherever not every seed is present. With a single seed the band
+    collapses onto the mean.
     """
     stack = np.asarray(stack)
     n, m = stack.shape
@@ -39,19 +48,18 @@ def mean_ci(
         idx = rng.integers(0, n, size=(e - s, n))  # resample seed indices
         boot[s:e] = sub[idx].mean(axis=1)
     ci_lo[valid], ci_hi[valid] = np.percentile(boot, [lo, hi], axis=0)
-    return mean, ci_lo, ci_hi
+    return Interval(mean, ci_lo, ci_hi)
 
 
 def median_ti(
     stack: ArrayLike, coverage: float = 0.95, confidence: float = 0.95
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+) -> Interval:
     """Median and tolerance interval over runs at each point.
 
-    Returns a ``(median, ti_lo, ti_hi)`` triple, NaN wherever not every run is
-    present. The interval is a pair of order statistics that covers at least
-    ``coverage`` of the run distribution with probability ``confidence``. Too
-    few runs (93 for 95%/95%) cannot reach that confidence; the interval then
-    falls back to the runs' min and max.
+    NaN wherever not every run is present. The interval is a pair of order
+    statistics that covers at least ``coverage`` of the run distribution with
+    probability ``confidence``. Too few runs (93 for 95%/95%) cannot reach that
+    confidence; the interval then falls back to the runs' min and max.
     """
     stack = np.asarray(stack, dtype=float)
     n, m = stack.shape
@@ -67,7 +75,7 @@ def median_ti(
     median[valid] = np.median(ordered, axis=0)
     ti_lo[valid] = ordered[trimmed]
     ti_hi[valid] = ordered[n - 1 - trimmed]
-    return median, ti_lo, ti_hi
+    return Interval(median, ti_lo, ti_hi)
 
 
 def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
