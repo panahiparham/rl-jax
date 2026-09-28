@@ -3,6 +3,7 @@ from typing import Any, NamedTuple
 from agents.agent0 import Agent0Agent, Agent0Config
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
+from agents.dqn_noheadbias import DQNNoHeadBiasAgent, DQNNoHeadBiasConfig
 from agents.random import RandomAgent, RandomConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
 
@@ -21,6 +22,7 @@ AGENTS: dict[str, AgentSpec] = {
     "random_buffered": AgentSpec(RandomBufferConfig, RandomBufferAgent),
     "dqn": AgentSpec(DQNConfig, DQNAgent),
     "ddqn": AgentSpec(DDQNConfig, DDQNAgent),
+    "dqn_noheadbias": AgentSpec(DQNNoHeadBiasConfig, DQNNoHeadBiasAgent),
     "agent0": AgentSpec(Agent0Config, Agent0Agent),
 }
 
@@ -37,6 +39,7 @@ __all__ = [
     "AgentSpec",
     "DDQNConfig",
     "DQNConfig",
+    "DQNNoHeadBiasConfig",
     "RandomBufferConfig",
     "RandomConfig",
     "get_config",
