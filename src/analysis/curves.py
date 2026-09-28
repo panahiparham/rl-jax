@@ -1,4 +1,4 @@
-"""One run's signal over time, from the per-timestep ``reward``/``done`` it stores."""
+"""Signals over time from the per-timestep ``reward``/``done`` each run stores."""
 
 from __future__ import annotations
 
@@ -23,3 +23,23 @@ def ema(reward: ArrayLike, beta: float = 0.99) -> NDArray[np.float64]:
     initial = beta * reward[..., :1]
     smoothed, _ = lfilter([1 - beta], [1, -beta], reward, axis=-1, zi=initial)
     return np.asarray(smoothed, dtype=np.float64)
+
+
+def return_curve(reward: ArrayLike, done: ArrayLike) -> NDArray[np.float64]:
+    """Each timestep's episode return, along the last axis.
+
+    Every step of an episode gets the return of that whole episode, so the
+    curve's time average is the step-weighted mean episode return. Steps after
+    the last completed episode are NaN.
+    """
+    reward = np.asarray(reward, dtype=float)
+    ended = np.asarray(done) > 0
+    curve = np.full(reward.shape, np.nan)
+    for run in np.ndindex(reward.shape[:-1]):
+        ends = np.flatnonzero(ended[run])
+        if ends.size == 0:
+            continue
+        returns = np.diff(np.cumsum(reward[run])[ends], prepend=0.0)
+        lengths = np.diff(ends, prepend=-1)
+        curve[run][: ends[-1] + 1] = np.repeat(returns, lengths)
+    return curve
