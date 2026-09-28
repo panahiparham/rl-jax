@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from analysis.stats import (
+    best_by_mean,
     mean_ci,
     median_ti,
     min_max_normalize,
@@ -151,3 +152,30 @@ def test_median_ti_of_per_run_scalars_is_one_interval():
     center, low, high = median_ti([1.0, 2.0, 6.0])
     assert center.shape == ()
     assert (center, low, high) == (2.0, 1.0, 6.0)
+
+
+# --- best_by_mean -------------------------------------------------------------
+
+
+def test_best_by_mean_picks_the_highest_mean():
+    """The chosen key has the highest mean over its runs, not the highest run."""
+    scores = {0.1: [1.0, 5.0], 0.01: [4.0, 4.0], 0.001: [0.0, 2.0]}
+    assert best_by_mean(scores) == 0.01
+
+
+def test_best_by_mean_never_picks_a_key_with_a_nan_run():
+    """A run that finished no episode leaves its key's mean undefined."""
+    scores = {"diverged": [9.0, np.nan], "stable": [1.0, 1.0]}
+    assert best_by_mean(scores) == "stable"
+
+
+def test_best_by_mean_breaks_ties_by_order():
+    """Equal means resolve to the first key, so the choice is deterministic."""
+    assert best_by_mean({"b": [2.0], "a": [2.0]}) == "b"
+
+
+@pytest.mark.parametrize("scores", [{}, {"only": [np.nan]}])
+def test_best_by_mean_raises_without_a_defined_mean(scores):
+    """With nothing to choose from there is no best key to report."""
+    with pytest.raises(ValueError, match="no key"):
+        best_by_mean(scores)
