@@ -12,7 +12,7 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.stats import binom
 
 
-def bootstrap_mean_ci(
+def mean_ci(
     stack: ArrayLike,
     n_boot: int = 10_000,
     lo: float = 2.5,
@@ -42,7 +42,7 @@ def bootstrap_mean_ci(
     return mean, ci_lo, ci_hi
 
 
-def median_tolerance_interval(
+def median_ti(
     stack: ArrayLike, coverage: float = 0.95, confidence: float = 0.95
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Median and tolerance interval over runs at each point.

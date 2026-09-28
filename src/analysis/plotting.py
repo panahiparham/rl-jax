@@ -45,7 +45,7 @@ from experiment.results import load_result, load_runs
 from matplotlib.axes import Axes
 from numpy.typing import ArrayLike, NDArray
 
-from analysis.stats import bootstrap_mean_ci, median_tolerance_interval
+from analysis.stats import mean_ci, median_ti
 
 CurveFn = Callable[[dict[str, Any]], tuple[NDArray[np.float64], NDArray[np.float64]]]
 MetricFn = Callable[[dict[str, Any]], float]
@@ -259,7 +259,7 @@ def weighted_lifetime_return_stack(
     """Per-seed weighted-lifetime-return, one column per swept hyper value.
 
     For a sensitivity curve: feed the result straight into
-    :func:`bootstrap_mean_ci` / :func:`plot_mean_ci` with ``values`` as the
+    :func:`mean_ci` / :func:`plot_mean_ci` with ``values`` as the
     x-axis grid. For a continuing task (e.g. Catch), use
     :func:`average_lifetime_reward_stack` instead.
     """
@@ -319,7 +319,7 @@ def plot_mean_ci(
     Returns the plotted ``mean`` array. The band is masked to where every
     seed is present, so it has zero width for a single seed.
     """
-    mean, ci_lo, ci_hi = bootstrap_mean_ci(stack, n_boot=n_boot)
+    mean, ci_lo, ci_hi = mean_ci(stack, n_boot=n_boot)
     m = ~np.isnan(mean)
     ax.fill_between(grid[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)  # band
     ax.plot(grid[m], mean[m], lw=2.5, color=color, label=label)  # thick mean
@@ -338,7 +338,7 @@ def plot_median_ti(
     Returns the plotted ``median`` array. The band is masked to where every
     run is present.
     """
-    median, ti_lo, ti_hi = median_tolerance_interval(stack)
+    median, ti_lo, ti_hi = median_ti(stack)
     m = ~np.isnan(median)
     ax.fill_between(grid[m], ti_lo[m], ti_hi[m], color=color, alpha=0.2)  # band
     ax.plot(grid[m], median[m], lw=2.5, color=color, label=label)  # thick median
@@ -357,7 +357,7 @@ def plot_bars_mean_ci(
     heights. A single run gives a bar at its own value with no whisker.
     """
     stats = [
-        bootstrap_mean_ci(np.asarray(values, dtype=float)[:, None], n_boot=n_boot)
+        mean_ci(np.asarray(values, dtype=float)[:, None], n_boot=n_boot)
         for values in samples.values()
     ]
     mean, ci_lo, ci_hi = (np.concatenate(column) for column in zip(*stats, strict=True))

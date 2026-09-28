@@ -6,28 +6,28 @@ import numpy as np
 import pytest
 
 from analysis.stats import (
-    bootstrap_mean_ci,
-    median_tolerance_interval,
+    mean_ci,
+    median_ti,
     min_max_normalize,
 )
 
-# --- bootstrap_mean_ci ----------------------------------------------------------
+# --- mean_ci ------------------------------------------------------------------
 
 
-def test_bootstrap_mean_ci_mean_matches_constant_return_across_seeds():
+def test_mean_ci_mean_matches_constant_return_across_seeds():
     """Identical runs average to their shared value."""
     stack = np.full((5, 4), -4.0)
 
-    mean, _ci_lo, _ci_hi = bootstrap_mean_ci(stack, n_boot=200)
+    mean, _ci_lo, _ci_hi = mean_ci(stack, n_boot=200)
 
     assert np.allclose(mean, -4)
 
 
-def test_bootstrap_mean_ci_band_has_zero_width_when_seeds_agree():
+def test_mean_ci_band_has_zero_width_when_seeds_agree():
     """Resampling identical runs cannot move the mean, so the band collapses."""
     stack = np.full((5, 4), -4.0)
 
-    _mean, ci_lo, ci_hi = bootstrap_mean_ci(stack, n_boot=200)
+    _mean, ci_lo, ci_hi = mean_ci(stack, n_boot=200)
 
     assert np.allclose(ci_lo, -4)
     assert np.allclose(ci_hi, -4)
@@ -60,7 +60,7 @@ def test_min_max_normalize_ignores_nan_for_bounds():
     assert np.allclose(normalized[1:3], [0.0, 1.0])
 
 
-# --- median_tolerance_interval ------------------------------------------------
+# --- median_ti ----------------------------------------------------------------
 
 
 def _shuffled_ranks(n_runs: int, n_points: int = 3):
@@ -72,13 +72,13 @@ def test_tolerance_interval_reaches_its_stated_confidence():
     """Across many independent point estimates, the 95%/95% interval covers at
     least 95% of the run distribution in at least 95% of them."""
     runs = np.random.default_rng(0).random((300, 4000))  # uniform: coverage = width
-    _median, ti_lo, ti_hi = median_tolerance_interval(runs)
+    _median, ti_lo, ti_hi = median_ti(runs)
     assert ((ti_hi - ti_lo) >= 0.95).mean() >= 0.95
 
 
 def test_tolerance_interval_trims_order_statistics_with_enough_runs():
     """With 300 runs the interval drops the 3 most extreme runs on each side."""
-    median, ti_lo, ti_hi = median_tolerance_interval(_shuffled_ranks(300))
+    median, ti_lo, ti_hi = median_ti(_shuffled_ranks(300))
     assert np.allclose(median, 149.5)
     assert np.allclose(ti_lo, 3.0)
     assert np.allclose(ti_hi, 296.0)
@@ -87,7 +87,7 @@ def test_tolerance_interval_trims_order_statistics_with_enough_runs():
 @pytest.mark.parametrize("n_runs", [3, 100])
 def test_tolerance_interval_spans_all_runs_when_too_few_to_trim(n_runs: int):
     """Below the runs needed to trim anything, the interval is [min, max]."""
-    _median, ti_lo, ti_hi = median_tolerance_interval(_shuffled_ranks(n_runs))
+    _median, ti_lo, ti_hi = median_ti(_shuffled_ranks(n_runs))
     assert np.allclose(ti_lo, 0.0)
     assert np.allclose(ti_hi, n_runs - 1)
 
@@ -97,7 +97,7 @@ def test_tolerance_interval_is_nan_where_a_run_is_missing():
     contributes."""
     stack = _shuffled_ranks(5)
     stack[2, 1] = np.nan
-    median, ti_lo, ti_hi = median_tolerance_interval(stack)
+    median, ti_lo, ti_hi = median_ti(stack)
     for values in (median, ti_lo, ti_hi):
         assert np.isnan(values[1])
         assert not np.isnan(values[[0, 2]]).any()
