@@ -23,7 +23,6 @@ from experiment.runner import run_shards
 from analysis.plotting import (
     average_lifetime_reward,
     average_lifetime_reward_stack,
-    ema_reward,
     ema_reward_grids_for,
     episode_lengths,
     episode_returns,
@@ -134,23 +133,6 @@ def test_average_lifetime_reward_stack_shape_and_values(tmp_path):
     # the fake reward is constant == LR every step, so the mean is LR itself
     np.testing.assert_allclose(stack[:, 0], 0.1)
     np.testing.assert_allclose(stack[:, 1], 0.2)
-
-
-# --- ema_reward ---------------------------------------------------------------
-
-
-def test_ema_reward_first_value_is_unsmoothed():
-    assert ema_reward([5.0, 1.0, 1.0], beta=0.5)[0] == pytest.approx(5.0)
-
-
-def test_ema_reward_matches_manual_recursion():
-    reward = [1.0, 0.0, 1.0, 0.0]
-    expected = [1.0, 0.5, 0.75, 0.375]
-    np.testing.assert_allclose(ema_reward(reward, beta=0.5), expected)
-
-
-def test_ema_reward_empty():
-    assert ema_reward([]).size == 0
 
 
 def test_ema_reward_grids_for_shape_and_values(tmp_path):

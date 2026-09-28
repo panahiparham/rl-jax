@@ -22,7 +22,7 @@ band:
   component instead.
 * :func:`average_lifetime_reward` / :func:`average_lifetime_reward_stack` - the same
   idea for a continuing task (e.g. Catch), which has no episode to derive a return
-  from: mean reward rate over the whole run instead. :func:`ema_reward` is its
+  from: mean reward rate over the whole run instead. :func:`~analysis.curves.ema` is its
   per-timestep (not collapsed) version, feeding :func:`ema_reward_grids_for`.
 * :func:`mean_over_seeds` - a pointwise mean, defined only where *every* seed
   contributes (so the mean is always over the same seeds).
@@ -45,6 +45,7 @@ from experiment.results import load_result, load_runs
 from matplotlib.axes import Axes
 from numpy.typing import ArrayLike, NDArray
 
+from analysis.curves import ema
 from analysis.stats import mean_ci, median_ti
 
 CurveFn = Callable[[dict[str, Any]], tuple[NDArray[np.float64], NDArray[np.float64]]]
@@ -104,23 +105,6 @@ def average_lifetime_reward(reward: ArrayLike) -> float:
     return float(np.mean(np.asarray(reward, dtype=float)))
 
 
-def ema_reward(reward: ArrayLike, beta: float = 0.99) -> NDArray[np.float64]:
-    """Exponential moving average of per-timestep reward.
-
-    The learning-curve counterpart of :func:`average_lifetime_reward` for a
-    continuing task: with no episode boundaries to interpolate a return
-    between, smoothing the raw reward stream directly is the only option.
-    ``beta`` is in ``[0, 1)``; higher means more smoothing, following
-    ``ema[i] = beta * ema[i - 1] + (1 - beta) * reward[i]``. The first value
-    is left unsmoothed - there is nothing to average against yet.
-    """
-    reward = np.asarray(reward, dtype=float)
-    ema = np.empty_like(reward)
-    if reward.size:
-        ema[0] = reward[0]
-        for i in range(1, reward.size):
-            ema[i] = beta * ema[i - 1] + (1 - beta) * reward[i]
-    return ema
 
 
 def interp_on_grid(
@@ -204,7 +188,7 @@ def ema_reward_grids_for(
 
     def curve(c: dict[str, Any]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         reward = np.asarray(c["reward"], dtype=float)
-        return np.arange(reward.size, dtype=np.float64), ema_reward(reward, beta=beta)
+        return np.arange(reward.size, dtype=np.float64), ema(reward, beta=beta)
 
     return _interp_stack_for(experiment, component, grid, run_ids, curve)
 
