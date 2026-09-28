@@ -21,19 +21,32 @@ class Interval(NamedTuple):
     high: NDArray[np.float64]
 
 
+def _per_point(samples: ArrayLike) -> NDArray[np.float64]:
+    """``[n_runs, ...]`` samples as a ``[n_runs, n_points]`` stack."""
+    samples = np.asarray(samples, dtype=float)
+    return samples.reshape(len(samples), -1)
+
+
+def _shaped_like(interval: Interval, samples: ArrayLike) -> Interval:
+    shape = np.shape(samples)[1:]
+    center, low, high = interval
+    return Interval(center.reshape(shape), low.reshape(shape), high.reshape(shape))
+
+
 def mean_ci(
-    stack: ArrayLike,
+    samples: ArrayLike,
     n_boot: int = 10_000,
     lo: float = 2.5,
     hi: float = 97.5,
     seed: int = 0,
 ) -> Interval:
-    """Bootstrap a mean and confidence interval over seeds at each timestep.
+    """Bootstrap a mean and confidence interval over seeds at each point.
 
-    NaN wherever not every seed is present. With a single seed the band
-    collapses onto the mean.
+    ``samples`` is ``[n_runs]`` or ``[n_runs, ...]``, and the interval takes its
+    trailing shape. NaN wherever not every seed is present. With a single seed
+    the band collapses onto the mean.
     """
-    stack = np.asarray(stack)
+    stack = _per_point(samples)
     n, m = stack.shape
     valid = (~np.isnan(stack)).sum(axis=0) == n
     mean = np.full(m, np.nan)
@@ -48,20 +61,22 @@ def mean_ci(
         idx = rng.integers(0, n, size=(e - s, n))  # resample seed indices
         boot[s:e] = sub[idx].mean(axis=1)
     ci_lo[valid], ci_hi[valid] = np.percentile(boot, [lo, hi], axis=0)
-    return Interval(mean, ci_lo, ci_hi)
+    return _shaped_like(Interval(mean, ci_lo, ci_hi), samples)
 
 
 def median_ti(
-    stack: ArrayLike, coverage: float = 0.95, confidence: float = 0.95
+    samples: ArrayLike, coverage: float = 0.95, confidence: float = 0.95
 ) -> Interval:
     """Median and tolerance interval over runs at each point.
 
-    NaN wherever not every run is present. The interval is a pair of order
-    statistics that covers at least ``coverage`` of the run distribution with
-    probability ``confidence``. Too few runs (93 for 95%/95%) cannot reach that
-    confidence; the interval then falls back to the runs' min and max.
+    ``samples`` is ``[n_runs]`` or ``[n_runs, ...]``, and the interval takes its
+    trailing shape. NaN wherever not every run is present. The interval is a
+    pair of order statistics that covers at least ``coverage`` of the run
+    distribution with probability ``confidence``. Too few runs (93 for 95%/95%)
+    cannot reach that confidence; the interval then falls back to the runs' min
+    and max.
     """
-    stack = np.asarray(stack, dtype=float)
+    stack = _per_point(samples)
     n, m = stack.shape
     valid = (~np.isnan(stack)).sum(axis=0) == n
     median = np.full(m, np.nan)
@@ -75,7 +90,7 @@ def median_ti(
     median[valid] = np.median(ordered, axis=0)
     ti_lo[valid] = ordered[trimmed]
     ti_hi[valid] = ordered[n - 1 - trimmed]
-    return Interval(median, ti_lo, ti_hi)
+    return _shaped_like(Interval(median, ti_lo, ti_hi), samples)
 
 
 def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
