@@ -1,11 +1,11 @@
-"""Aggregates over runs: a center and a band at each point, and normalization.
+"""Aggregates over runs: intervals, normalization and picking the best setting.
 
-Every function takes a stack with one row per run.
+Runs are the first axis of every array.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import NamedTuple
 
 import numpy as np
@@ -110,3 +110,18 @@ def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
     if low == high:
         raise ValueError(f"every value is {low}, so there is no range to normalize")
     return [(v - low) / (high - low) for v in values]
+
+
+def best_by_mean[K](scores: Mapping[K, ArrayLike]) -> K:
+    """The key whose runs score highest on average, e.g. the best learning rate.
+
+    A key with a NaN run has no mean and is never chosen. Ties go to the key
+    that comes first.
+    """
+    means = {
+        key: float(np.asarray(runs, dtype=float).mean()) for key, runs in scores.items()
+    }
+    defined = {key: mean for key, mean in means.items() if not np.isnan(mean)}
+    if not defined:
+        raise ValueError("no key has a mean over its runs")
+    return max(defined, key=defined.__getitem__)
