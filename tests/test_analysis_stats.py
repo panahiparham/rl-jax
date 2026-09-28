@@ -91,6 +91,18 @@ def test_min_max_normalize_ignores_nan_for_bounds():
     assert np.allclose(normalized[1:3], [0.0, 1.0])
 
 
+def test_min_max_normalize_rejects_no_arrays():
+    """An environment with no data is skipped, not normalized."""
+    with pytest.raises(ValueError, match="no arrays"):
+        min_max_normalize([])
+
+
+def test_min_max_normalize_rejects_a_constant():
+    """Equal bounds leave no range, which would otherwise divide by zero."""
+    with pytest.raises(ValueError, match="no range"):
+        min_max_normalize([[3.0, 3.0], [3.0]])
+
+
 # --- median_ti ----------------------------------------------------------------
 
 

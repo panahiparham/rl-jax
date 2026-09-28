@@ -103,6 +103,10 @@ def min_max_normalize(arrays: Sequence[ArrayLike]) -> list[NDArray[np.float64]]:
     comparable. NaNs are ignored when finding the bounds and stay NaN.
     """
     values = [np.asarray(a, dtype=float) for a in arrays]
+    if not values:
+        raise ValueError("no arrays to normalize")
     low = min(np.nanmin(v) for v in values)
     high = max(np.nanmax(v) for v in values)
+    if low == high:
+        raise ValueError(f"every value is {low}, so there is no range to normalize")
     return [(v - low) / (high - low) for v in values]
