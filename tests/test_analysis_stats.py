@@ -33,6 +33,22 @@ def test_mean_ci_band_has_zero_width_when_seeds_agree():
     assert np.allclose(ci_hi, -4)
 
 
+
+def test_mean_ci_of_per_run_scalars_is_one_interval():
+    """One lifetime score per run gives a single mean and band, as for a bar."""
+    center, low, high = mean_ci([1.0, 2.0, 6.0], n_boot=200)
+    assert center.shape == ()
+    assert np.isclose(center, 3.0)
+    assert 1.0 <= low <= center <= high <= 6.0
+
+
+def test_mean_ci_keeps_the_trailing_shape_of_its_samples():
+    """Runs are the first axis; every other axis is kept point by point."""
+    samples = np.random.default_rng(0).normal(size=(4, 2, 3))
+    center, low, high = mean_ci(samples, n_boot=200)
+    assert center.shape == low.shape == high.shape == (2, 3)
+    assert np.allclose(center, samples.mean(axis=0))
+
 # --- min_max_normalize --------------------------------------------------------
 
 
@@ -101,3 +117,10 @@ def test_tolerance_interval_is_nan_where_a_run_is_missing():
     for values in (median, ti_lo, ti_hi):
         assert np.isnan(values[1])
         assert not np.isnan(values[[0, 2]]).any()
+
+
+def test_median_ti_of_per_run_scalars_is_one_interval():
+    """Too few runs to trim, so the band spans the smallest and largest run."""
+    center, low, high = median_ti([1.0, 2.0, 6.0])
+    assert center.shape == ()
+    assert (center, low, high) == (2.0, 1.0, 6.0)
