@@ -1,11 +1,14 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from experiment.hypers import merge_traced, split_traced
+import polars as pl
+from experiment.design import Experiment
+from experiment.hypers import get_path, merge_traced, split_traced
+from experiment.results import load_result, load_runs
 
 from agents import AGENTS
 from agents import get_config as get_agent_config
@@ -209,3 +212,47 @@ def process_shard(
         {name: np.asarray(value[index]) for name, value in metrics.items()}
         for index in range(len(seeds))
     ]
+
+
+@dataclass(frozen=True)
+class Results:
+    """What a component's runs stored, one ``[n_runs, T]`` row per run."""
+
+    seed: np.ndarray
+    reward: np.ndarray
+    done: np.ndarray
+
+
+def load_results(
+    experiment: Experiment,
+    component: str,
+    where: Mapping[str, Any] | None = None,
+) -> Results | None:
+    """Stack the reward and done of every stored run matching ``where``.
+
+    ``where`` maps dotted config paths to the value a run must have, e.g.
+    ``{"ENV_HYPERS.GAME": "pong"}``. Rows follow seed order. Returns ``None``
+    when no stored run matches, and raises for a path the config lacks even
+    before anything is stored.
+    """
+    where = dict(where or {})
+    config = experiment.component(component).config
+    for path in where:
+        get_path(config, path)
+
+    runs = load_runs(experiment, component)
+    if runs.is_empty():
+        return None
+    matching = runs.filter(*(pl.col(path) == value for path, value in where.items()))
+    if matching.is_empty():
+        return None
+
+    matching = matching.sort("seed")
+    stored = [
+        load_result(experiment, component, run_id) for run_id in matching["run_id"]
+    ]
+    return Results(
+        seed=matching["seed"].to_numpy(),
+        reward=np.stack([run["reward"] for run in stored]),
+        done=np.stack([run["done"] for run in stored]),
+    )

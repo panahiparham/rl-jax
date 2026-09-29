@@ -1,7 +1,5 @@
-"""Turning this project's stored runs into learning curves and summary numbers.
+"""Turning stored ``reward``/``done`` arrays into learning curves and metrics.
 
-:mod:`analysis.plotting` reads a component's store through the harness and works
-in this project's vocabulary - per-timestep ``reward`` and ``done`` curves,
-episodes, returns - which is why it sits here rather than
-in ``experiment``.
+:mod:`analysis.curves` works on each run over time; :mod:`analysis.stats`
+aggregates across runs. Both take plain arrays and never read the store or draw.
 """

@@ -21,7 +21,7 @@ The RL contract this suite pins down:
   ``obs`` at index ``i + 1``, at a boundary as much as anywhere else.
 * **A truncated transition must not train.** Its stored successor belongs to
   the next episode, so ``dqn``/``ddqn`` exclude it from the TD loss.
-* **Analysis** (``plotting.episode_returns``) segments episodes on the merged
+* **Analysis** (``analysis.curves.return_curve``) segments episodes on the merged
   ``done`` flag, the only form the stored metrics keep.
 
 Fake envs (single float obs, distinguishable reset sentinel) make the stored

@@ -68,18 +68,6 @@ def _environment(key: str, *components: str, metric: str = report.METRIC_RETURN)
     return report.Environment(key=key, title=key, series=series, metric=metric)
 
 
-def _spy_on_curves(monkeypatch) -> list[tuple[str, np.ndarray]]:
-    drawn: list[tuple[str, np.ndarray]] = []
-    real = report.plot_mean_ci
-
-    def spy(ax, grid, stack, label, color, **kwargs):
-        drawn.append((label, stack))
-        return real(ax, grid, stack, label, color, **kwargs)
-
-    monkeypatch.setattr(report, "plot_mean_ci", spy)
-    return drawn
-
-
 def test_plot_environment_overlays_every_agent_on_one_png(tmp_path):
     experiment = _experiment(tmp_path / "results", "dqn_catch", "random_catch")
     _seed_component(experiment, "dqn_catch", [10.0, 11.0, 12.0])
@@ -104,44 +92,37 @@ def test_plot_environment_returns_none_without_runs(tmp_path):
     assert path is None
 
 
-def test_plot_environment_draws_only_the_agents_that_have_runs(tmp_path, monkeypatch):
+def test_environment_curves_skip_the_agents_without_runs(tmp_path):
     experiment = _experiment(tmp_path / "results", "dqn_catch", "ddqn_catch")
     _seed_component(experiment, "dqn_catch", [10.0, 11.0, 12.0])
-    drawn = _spy_on_curves(monkeypatch)
 
-    report.plot_environment(
-        experiment, _environment("catch", "dqn_catch", "ddqn_catch"), tmp_path / "plots"
+    curves = report.environment_curves(
+        experiment, _environment("catch", "dqn_catch", "ddqn_catch")
     )
 
-    assert [label for label, _ in drawn] == ["dqn_catch"]
+    assert [series.label for series, _, _ in curves] == ["dqn_catch"]
 
 
-def test_plot_environment_smooths_reward_for_a_continuing_task(tmp_path, monkeypatch):
+def test_environment_curves_smooth_reward_for_a_continuing_task(tmp_path):
     experiment = _experiment(tmp_path / "results", "dqn_catch")
     _seed_continuing_component(experiment, "dqn_catch", [0.5, 0.5, 0.5])
-    drawn = _spy_on_curves(monkeypatch)
 
-    report.plot_environment(
-        experiment,
-        _environment("catch", "dqn_catch", metric=report.METRIC_REWARD),
-        tmp_path / "plots",
+    ((_, _, values),) = report.environment_curves(
+        experiment, _environment("catch", "dqn_catch", metric=report.METRIC_REWARD)
     )
 
-    assert drawn[0][1][:, 0] == pytest.approx(0.5)
+    assert values[:, 0] == pytest.approx(0.5)
 
 
-def test_plot_environment_finds_no_episode_return_in_a_continuing_task(
-    tmp_path, monkeypatch
-):
+def test_environment_curves_find_no_episode_return_in_a_continuing_task(tmp_path):
     experiment = _experiment(tmp_path / "results", "dqn_catch")
     _seed_continuing_component(experiment, "dqn_catch", [0.5, 0.5, 0.5])
-    drawn = _spy_on_curves(monkeypatch)
 
-    report.plot_environment(
-        experiment, _environment("catch", "dqn_catch"), tmp_path / "plots"
+    ((_, _, values),) = report.environment_curves(
+        experiment, _environment("catch", "dqn_catch")
     )
 
-    assert np.isnan(drawn[0][1]).all()
+    assert np.isnan(values).all()
 
 
 def test_render_plots_saves_one_png_per_environment(tmp_path):
