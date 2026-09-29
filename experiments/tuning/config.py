@@ -159,8 +159,7 @@ _CATCH_ENV_HYPERS = CatchConfig(
     EPISODE_CUTOFF=1_000_000_000,  # continuing task - never truncate within this run
 )
 
-# LR is swept per-component; every other hyper follows the pinball benchmark recipe
-# (see experiments/pinball/config.py's _PINBALL_LEARNER).
+# LR is swept per-component; every other hyper follows the pinball benchmark recipe.
 PINBALL_LR_SWEEP = [4.0 ** -i for i in (2, 3, 4, 5, 6, 7)]
 _PINBALL_LEARNER = {
     "TOTAL_TIMESTEPS": 100_000,
