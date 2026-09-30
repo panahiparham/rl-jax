@@ -38,7 +38,7 @@ _PINBALL_LEARNER = {
     "REWARD_CLIP": False,
 }
 _ENV_HYPERS = PinballConfig(SETTING="easy", EPISODE_CUTOFF=1_000)
-_SEEDS = list(range(30))
+_SEEDS = list(range(100))
 
 
 def _ddqn(name: str, **hypers: int) -> Component:
