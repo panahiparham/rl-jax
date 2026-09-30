@@ -631,3 +631,95 @@ def test_size_counts_additions_up_to_capacity(num_adds: int, expected: int):
     state = _fill(buffer, [1.0] * num_adds, [False] * num_adds, [False] * num_adds)
 
     assert int(buffer.size(state)) == expected
+
+
+def _push_log(buffer, space, transitions, observations, valid):
+    state = buffer.init(space)
+    outgoing = []
+    for (step, action, reward, terminated, truncated), is_valid in zip(
+        transitions, valid, strict=True
+    ):
+        pushed = buffer.push(
+            state,
+            TimeStep(
+                obs=jnp.asarray(observations[step]),
+                action=jnp.asarray(action, jnp.int32),
+                reward=jnp.asarray(reward, jnp.float32),
+                termination=jnp.asarray(terminated),
+                truncation=jnp.asarray(truncated),
+                discount=jnp.float32(not terminated),
+            ),
+            jnp.asarray(is_valid),
+        )
+        state = pushed.state
+        if bool(pushed.out_valid):
+            outgoing.append(pushed.out)
+    return state, outgoing
+
+
+@settings(max_examples=8, deadline=None, derandomize=True)
+@given(case=_frame_stack_cases())
+@example(case=(2, 3, 4, 1, 1, 5, [5, 4, 3], [False, True, False]))
+def test_push_emits_each_timestep_once_as_it_ages_out(
+    case: tuple[int, int, int, int, int, int, list[int], list[bool]],
+):
+    """Outgoing timesteps followed by the stored ones replay the stream in order.
+
+    Every timestep with a complete frame stack leaves exactly once, carrying
+    its stacked observation; only the first ``stack_size - 1`` of a wrapped
+    buffer never leave.
+    """
+    height, width, stack_size, frame_channels, _, capacity, lengths, truncs = case
+    transitions, observations = _synthetic_frame_log(
+        lengths, truncs, height, width, stack_size, frame_channels
+    )
+    buffer = ReplayBuffer(capacity=capacity, batch_size=1, n_step=1, gamma=0.9)
+    space = _FrameStackSpace(
+        (height, width, stack_size * frame_channels), frame_channels
+    )
+
+    state, outgoing = _push_log(
+        buffer, space, transitions, observations, [True] * len(transitions)
+    )
+
+    stored = buffer.stored_transitions(state)
+    replayed = [jax.tree.map(np.asarray, timestep) for timestep in outgoing]
+    replayed += [
+        jax.tree.map(lambda x, i=i: np.asarray(x[i]), stored)
+        for i in range(len(stored.action))
+    ]
+    skip = stack_size - 1 if len(transitions) >= capacity else 0
+    assert [int(t.action) for t in replayed] == list(range(skip, len(transitions)))
+    for timestep in replayed:
+        step, _, reward, terminated, truncated = transitions[int(timestep.action)]
+        np.testing.assert_array_equal(timestep.obs, observations[step])
+        assert timestep.reward == reward
+        assert bool(timestep.termination) is terminated
+        assert bool(timestep.truncation) is truncated
+
+
+def test_invalid_push_leaves_the_buffer_unchanged():
+    """An invalid step neither enters the buffer nor pushes anything out."""
+    transitions, observations = _synthetic_frame_log([4, 5], [False, True], 2, 2, 2, 1)
+    garbage = [(0, 99, 50, True, True)] * 3
+    mixed = transitions[:6] + garbage + transitions[6:]
+    buffer = ReplayBuffer(capacity=4, batch_size=1, n_step=1, gamma=0.9)
+    space = _FrameStackSpace((2, 2, 2), 1)
+
+    clean_state, clean_out = _push_log(
+        buffer, space, transitions, observations, [True] * len(transitions)
+    )
+    mixed_state, mixed_out = _push_log(
+        buffer,
+        space,
+        mixed,
+        observations,
+        [True] * 6 + [False] * len(garbage) + [True] * (len(transitions) - 6),
+    )
+
+    for clean, mixed_leaf in zip(
+        jax.tree.leaves((clean_state, clean_out)),
+        jax.tree.leaves((mixed_state, mixed_out)),
+        strict=True,
+    ):
+        np.testing.assert_array_equal(clean, mixed_leaf)
