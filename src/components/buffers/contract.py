@@ -1,4 +1,4 @@
-from typing import NamedTuple, Protocol
+from typing import NamedTuple, Protocol, runtime_checkable
 
 import jax
 from jax.typing import DTypeLike
@@ -46,6 +46,7 @@ class Buffer[S, In, Out](Protocol):
     def size(self, state: S, /) -> jax.Array: ...
 
 
+@runtime_checkable
 class SampleableBuffer[S, In, Out](Buffer[S, In, Out], Protocol):
     @property
     def batch_size(self) -> int: ...
