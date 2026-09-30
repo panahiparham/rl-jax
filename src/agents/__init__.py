@@ -4,6 +4,7 @@ from agents.agent0 import Agent0Agent, Agent0Config
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
 from agents.dqn_noheadbias import DQNNoHeadBiasAgent, DQNNoHeadBiasConfig
+from agents.endpoint import EndpointAgent, EndpointConfig
 from agents.random import RandomAgent, RandomConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
 
@@ -24,6 +25,7 @@ AGENTS: dict[str, AgentSpec] = {
     "ddqn": AgentSpec(DDQNConfig, DDQNAgent),
     "dqn_noheadbias": AgentSpec(DQNNoHeadBiasConfig, DQNNoHeadBiasAgent),
     "agent0": AgentSpec(Agent0Config, Agent0Agent),
+    "endpoint": AgentSpec(EndpointConfig, EndpointAgent),
 }
 
 
@@ -40,6 +42,7 @@ __all__ = [
     "DDQNConfig",
     "DQNConfig",
     "DQNNoHeadBiasConfig",
+    "EndpointConfig",
     "RandomBufferConfig",
     "RandomConfig",
     "get_config",
