@@ -3,7 +3,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from components.buffers.contract import Batch, TimeStep
+from components.buffers.contract import Batch, Pushed, TimeStep
 
 
 class BufferState(NamedTuple):
@@ -13,6 +13,8 @@ class BufferState(NamedTuple):
     head: jax.Array
     size: jax.Array
     prev_done: jax.Array
+    # The stacked timestep that leaves on the next push.
+    outgoing: TimeStep
 
 
 def build_buffer(name: str, **kwargs):
@@ -123,6 +125,14 @@ class ReplayBuffer:
             head=jnp.asarray(0, jnp.int32),
             size=jnp.asarray(0, jnp.int32),
             prev_done=jnp.asarray(True),
+            outgoing=TimeStep(
+                obs=jnp.zeros(obs_shape, observation_space.dtype),
+                action=jnp.asarray(0, jnp.int32),
+                reward=jnp.asarray(0.0, jnp.float32),
+                termination=jnp.asarray(False),
+                truncation=jnp.asarray(False),
+                discount=jnp.asarray(0.0, jnp.float32),
+            ),
         )
 
     def add(
@@ -151,7 +161,37 @@ class ReplayBuffer:
             head=(state.head + 1) % self._capacity,
             size=jnp.minimum(state.size + 1, self._capacity),
             prev_done=termination | truncation,
+            outgoing=state.outgoing,
         )
+
+    def push(
+        self, state: BufferState, step: TimeStep, valid: jax.Array
+    ) -> Pushed[BufferState, TimeStep]:
+        slot = state.head
+        out_valid = valid & (state.size == self._capacity)
+
+        # An invalid step rewrites the slot with its current contents.
+        step = step._replace(obs=step.obs[..., -self._frame_channels :])
+        written = TimeStep(
+            *(
+                jnp.where(valid, new, old[slot])
+                for new, old in zip(step, state.data, strict=True)
+            )
+        )
+        prev_done = jnp.where(valid, state.prev_done, state.first[slot])
+        added = self.add(state._replace(prev_done=prev_done), *written)
+        pushed = added._replace(
+            head=jnp.where(valid, added.head, state.head),
+            size=jnp.where(valid, added.size, state.size),
+            prev_done=jnp.where(valid, added.prev_done, state.prev_done),
+        )
+
+        # The oldest slot with a full frame stack leaves on the next write.
+        # Reading it after this write, rather than before the next one, keeps
+        # the frame ring updated in place instead of copied.
+        oldest_full = (pushed.head + self._stack_size - 1) % self._capacity
+        outgoing = self._timesteps_at(pushed, oldest_full)
+        return Pushed(pushed._replace(outgoing=outgoing), state.outgoing, out_valid)
 
     def sample(self, state: BufferState, key: jax.Array) -> Batch:
         k = self._stack_size
