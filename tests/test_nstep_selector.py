@@ -5,6 +5,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from components import TimeStep
 from components.buffers.selector import NStepSelector
@@ -197,3 +199,40 @@ def test_invalid_steps_are_ignored():
     _assert_chunks_match(
         chunks, [_Chunk(3, 0, 3.0, 1.0, 3), _Chunk(8, 3, 3.0, 1.0, 8)]
     )
+
+
+# Agreement with the reference
+
+
+_STEP_KINDS = {
+    "plain": {},
+    "termination": {"termination": True, "discount": 0.0},
+    "life_loss": {"discount": 0.0},
+    "truncation": {"truncation": True},
+    "truncated_life_loss": {"truncation": True, "discount": 0.0},
+}
+
+
+@st.composite
+def _step_streams(draw: st.DrawFn):
+    n_step = draw(st.integers(1, 4))
+    gamma = draw(st.sampled_from([1.0, 0.9]))
+    kinds = st.sampled_from(sorted(_STEP_KINDS))
+    stream = draw(
+        st.lists(st.tuples(st.integers(-3, 3), kinds), min_size=1, max_size=25)
+    )
+    steps = [_Step(float(reward), **_STEP_KINDS[kind]) for reward, kind in stream]
+    return n_step, gamma, steps
+
+
+@settings(max_examples=20, deadline=None, derandomize=True)
+@given(case=_step_streams())
+def test_selector_matches_the_reference_on_random_streams(
+    case: tuple[int, float, list[_Step]],
+):
+    """Emitted chunks match the segment-based reference for any boundary mix."""
+    n_step, gamma, steps = case
+
+    chunks = _run_selector(steps, n_step=n_step, gamma=gamma)
+
+    _assert_chunks_match(chunks, _reference_chunks(steps, n_step, gamma))
