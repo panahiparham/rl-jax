@@ -48,8 +48,9 @@ def _add_steps(buffer: ComposedBuffer, num_steps: int) -> ComposedState:
     [
         ([NStepSelector(n_step=2, gamma=0.9)], ValueError),
         ([_recency(batch_size=1), _long_term()], ValueError),
+        ([ComposedBuffer([_recency()]), _long_term()], TypeError),
     ],
-    ids=["no-sampleable-buffer", "fallback-too-small"],
+    ids=["no-sampleable-buffer", "fallback-too-small", "composed-fallback"],
 )
 def test_construction_rejects_layouts_without_a_usable_fallback(
     buffers: list[ChainedBuffer], error: type[Exception]
@@ -114,3 +115,83 @@ def test_nested_composition_matches_the_flat_chain():
         jax.tree.leaves(flat_state), jax.tree.leaves(nested_state), strict=True
     ):
         assert np.array_equal(flat_leaf, nested_leaf)
+
+
+# Mixture sampling
+
+
+def _endpoint_like() -> ComposedBuffer:
+    return ComposedBuffer(
+        [
+            ReplayBuffer(capacity=6, batch_size=4, n_step=1, gamma=0.9),
+            NStepSelector(n_step=2, gamma=0.9),
+            _long_term(capacity=5),
+        ]
+    )
+
+
+# After 6 steps nothing has left recency; after 12 two chunks are stored.
+_LONG_TERM_EMPTY, _LONG_TERM_FILLED = 6, 12
+
+
+@pytest.mark.parametrize(
+    ("num_steps", "expected_discounts"),
+    [(_LONG_TERM_EMPTY, [0.9] * 4), (_LONG_TERM_FILLED, [0.9] * 3 + [0.81])],
+    ids=["long-term-empty", "long-term-filled"],
+)
+def test_merged_sample_fills_unavailable_rows_from_the_fallback(
+    num_steps: int, expected_discounts: list[float]
+):
+    """Long-term rows come from recency until the long-term buffer has data.
+
+    Recency rows are one-step (discount 0.9); long-term rows are two-step
+    chunks (discount 0.81).
+    """
+    buffer = _endpoint_like()
+    state = _add_steps(buffer, num_steps)
+
+    batch = jax.jit(buffer.sample)(state, jax.random.key(0))
+
+    assert batch.obs.shape == (4, 1)
+    assert np.allclose(batch.discount, expected_discounts)
+    assert np.asarray(batch.mask).all()
+
+
+@pytest.mark.parametrize(
+    ("num_steps", "fallback_mask", "long_term_mask"),
+    [
+        (_LONG_TERM_EMPTY, [True] * 4, [False]),
+        (_LONG_TERM_FILLED, [True] * 3 + [False], [True]),
+    ],
+    ids=["long-term-empty", "long-term-filled"],
+)
+def test_component_masks_keep_one_batch_of_rows_live(
+    num_steps: int, fallback_mask: list[bool], long_term_mask: list[bool]
+):
+    """Per-component batches keep static shapes and exactly four live rows."""
+    buffer = _endpoint_like()
+    state = _add_steps(buffer, num_steps)
+
+    recent, long_term = jax.jit(buffer.sample_components)(state, jax.random.key(0))
+
+    assert recent.obs.shape == (4, 1)
+    assert long_term.obs.shape == (1, 1)
+    assert np.asarray(recent.mask).tolist() == fallback_mask
+    assert np.asarray(long_term.mask).tolist() == long_term_mask
+
+
+@pytest.mark.parametrize("num_steps", [_LONG_TERM_EMPTY, _LONG_TERM_FILLED])
+def test_merged_rows_are_the_live_component_rows(num_steps: int):
+    """With the same key, the merged batch holds exactly the live rows."""
+    buffer = _endpoint_like()
+    state = _add_steps(buffer, num_steps)
+    key = jax.random.key(3)
+
+    merged = buffer.sample(state, key)
+    components = buffer.sample_components(state, key)
+
+    live = [
+        np.asarray(component.action)[np.asarray(component.mask)]
+        for component in components
+    ]
+    assert np.array_equal(np.asarray(merged.action), np.concatenate(live))
