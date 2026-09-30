@@ -4,6 +4,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from components import TimeStep
 from components.buffers.selector import NStepSelector
@@ -126,3 +127,73 @@ def test_one_step_chunks_emit_every_transition():
 
     assert [(c.start, c.boot) for c in chunks] == [(0, 1), (1, 2), (2, 3)]
     assert np.allclose([c.discount for c in chunks], [0.9] * 3)
+
+
+# Episode and life boundaries
+
+
+@pytest.mark.parametrize("terminates", [True, False])
+def test_zero_discount_closes_the_chunk_and_restarts_the_phase(terminates: bool):
+    """A termination or a life loss ends the chunk with no bootstrap.
+
+    Both show up as a zero step discount; the next chunk starts on the
+    following step instead of continuing the old phase.
+    """
+    steps = [_Step(1.0) for _ in range(10)]
+    steps[4] = _Step(1.0, termination=terminates, discount=0.0)
+
+    chunks = _run_selector(steps, n_step=3, gamma=1.0)
+
+    _assert_chunks_match(
+        chunks,
+        [
+            _Chunk(3, 0, 3.0, 1.0, 3),
+            _Chunk(5, 3, 2.0, 0.0, 5),
+            _Chunk(8, 5, 3.0, 1.0, 8),
+        ],
+    )
+
+
+def test_truncation_ends_the_chunk_on_the_truncating_step():
+    """A truncated chunk bootstraps from the truncating step's own observation.
+
+    The truncating step's reward is dropped because its successor belongs to
+    the next episode.
+    """
+    steps = [_Step(1.0) for _ in range(10)]
+    steps[4] = _Step(1.0, truncation=True)
+
+    chunks = _run_selector(steps, n_step=3, gamma=1.0)
+
+    _assert_chunks_match(
+        chunks,
+        [
+            _Chunk(3, 0, 3.0, 1.0, 3),
+            _Chunk(4, 3, 1.0, 1.0, 4),
+            _Chunk(8, 5, 3.0, 1.0, 8),
+        ],
+    )
+
+
+def test_truncation_at_a_chunk_start_emits_nothing_for_that_step():
+    """A chunk that would start on the truncating step is never emitted."""
+    steps = [_Step(1.0) for _ in range(8)]
+    steps[3] = _Step(1.0, truncation=True)
+
+    chunks = _run_selector(steps, n_step=3, gamma=1.0)
+
+    _assert_chunks_match(
+        chunks, [_Chunk(3, 0, 3.0, 1.0, 3), _Chunk(7, 4, 3.0, 1.0, 7)]
+    )
+
+
+def test_invalid_steps_are_ignored():
+    """Steps marked invalid neither advance nor emit a chunk."""
+    steps = [_Step(1.0) for _ in range(9)]
+    valid = [True] * 4 + [False] * 2 + [True] * 3
+
+    chunks = _run_selector(steps, n_step=3, gamma=1.0, valid=valid)
+
+    _assert_chunks_match(
+        chunks, [_Chunk(3, 0, 3.0, 1.0, 3), _Chunk(8, 3, 3.0, 1.0, 8)]
+    )
