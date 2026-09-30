@@ -1,10 +1,9 @@
 """Reusable agent components: networks, policies and replay buffers."""
 
+from components.buffers.contract import Batch, TimeStep
 from components.buffers.uniform import (
-    Batch,
     BufferState,
     ReplayBuffer,
-    TimeStep,
     build_buffer,
     n_step_return,
 )
