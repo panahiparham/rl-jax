@@ -8,7 +8,21 @@ from agents.endpoint import EndpointConfig
 from environments.atari import AtariConfig, EPRAtariConfig
 from main import ExperimentConfig
 
-_GAMES = ["pong", "breakout", "seaquest", "ms_pacman"]
+_GAMES = [
+    "pong",
+    "breakout",
+    "seaquest",
+    "centipede",
+    "ms_pacman",
+    "beam_rider",
+    "space_invaders",
+    "battle_zone",
+    "double_dunk",
+    "name_this_game",
+    "phoenix",
+    "qbert",
+]
+_SEEDS = list(range(10))
 
 _DQN_HYPERS = {
     "TOTAL_TIMESTEPS": 12_500_000,      # 50M frames at FRAMESKIP=4
@@ -26,6 +40,25 @@ _DQN_HYPERS = {
     "NETWORK_PRESET": "nature_cnn",
 }
 
+
+def _ddqn(name: str, **hypers: int) -> Component:
+    return Component(
+        name=name,
+        config=ExperimentConfig(
+            AGENT="ddqn",
+            ENV="atari",
+            AGENT_HYPERS=DDQNConfig(
+                **{**_DQN_HYPERS, **hypers}, REWARD_CLIP=True
+            ),
+            ENV_HYPERS=EPRAtariConfig(),
+        ),
+        sweep={"ENV_HYPERS.GAME": _GAMES},
+        seeds=_SEEDS,
+        shard_size=1,
+        parallel_shards=4,
+    )
+
+
 EXPERIMENT = Experiment(
     name="atari_50m_endpoint",
     results_dir=Path(__file__).resolve().parent / "results",
@@ -40,7 +73,7 @@ EXPERIMENT = Experiment(
                 ENV_HYPERS=AtariConfig(),
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=[0],
+            seeds=_SEEDS,
             shard_size=1,
             parallel_shards=4,
         ),
@@ -53,10 +86,14 @@ EXPERIMENT = Experiment(
                 ENV_HYPERS=EPRAtariConfig(),
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=[0],
+            seeds=_SEEDS,
             shard_size=1,
             parallel_shards=4,
         ),
+        _ddqn("ddqn_medium_atari", BUFFER_SIZE=100_000),
+        _ddqn("ddqn_medium_nstep_atari", BUFFER_SIZE=100_000, N_STEP=10),
+        _ddqn("ddqn_small_atari", BUFFER_SIZE=20_000),
+        _ddqn("ddqn_small_nstep_atari", BUFFER_SIZE=20_000, N_STEP=10),
         # Defaults mirror the original endpoint_medium run: 10k recency,
         # 90k 10-step long-term transitions, expectile 0.7.
         Component(
@@ -68,7 +105,21 @@ EXPERIMENT = Experiment(
                 ENV_HYPERS=EPRAtariConfig(),
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=[0],
+            seeds=_SEEDS,
+            shard_size=1,
+            parallel_shards=4,
+        ),
+        # The original endpoint_small run: 10k recency, 10k long-term.
+        Component(
+            name="endpoint_small_atari",
+            config=ExperimentConfig(
+                AGENT="endpoint",
+                ENV="atari",
+                AGENT_HYPERS=EndpointConfig(LONG_TERM_SIZE=10_000),
+                ENV_HYPERS=EPRAtariConfig(),
+            ),
+            sweep={"ENV_HYPERS.GAME": _GAMES},
+            seeds=_SEEDS,
             shard_size=1,
             parallel_shards=4,
         ),
