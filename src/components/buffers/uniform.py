@@ -183,6 +183,7 @@ class ReplayBuffer:
             ret=ret,
             discount=discount,
             boot_obs=boot_obs,
+            boot_action=state.data.action[boot_slots[:, -1]],
             mask=mask,
         )
 

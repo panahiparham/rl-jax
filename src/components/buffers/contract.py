@@ -19,6 +19,7 @@ class Batch(NamedTuple):
     ret: jax.Array
     discount: jax.Array
     boot_obs: jax.Array
+    boot_action: jax.Array
     mask: jax.Array
 
 
