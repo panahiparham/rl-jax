@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from components.buffers.contract import (
+    Batch,
     Buffer,
     ObservationSpace,
     Pushed,
@@ -16,27 +17,43 @@ from components.buffers.contract import (
 type ChainedBuffer = Buffer[Any, Any, Any]
 
 
+def _rows(batch: Batch, start: int, stop: int) -> Batch:
+    return Batch(*(field[start:stop] for field in batch))
+
+
+def _choose(available: jax.Array, own: Batch, substitute: Batch) -> Batch:
+    return Batch(
+        *(
+            jnp.where(available, a, b)
+            for a, b in zip(own, substitute, strict=True)
+        )
+    )
+
+
 class ComposedState(NamedTuple):
     states: tuple[object, ...]
 
 
 class ComposedBuffer:
     def __init__(self, buffers: Sequence[ChainedBuffer]) -> None:
-        sampleable = [
-            buffer for buffer in buffers if isinstance(buffer, SampleableBuffer)
+        sampled = [
+            (index, buffer)
+            for index, buffer in enumerate(buffers)
+            if isinstance(buffer, SampleableBuffer)
         ]
-        if not sampleable:
+        if not sampled:
             raise ValueError("a composed buffer needs a sampleable buffer")
-        fallback, *others = sampleable
+        (_, fallback), *others = sampled
         if isinstance(fallback, ComposedBuffer):
             raise TypeError("the first sampleable buffer cannot be composed")
-        if fallback.batch_size <= sum(other.batch_size for other in others):
+        if fallback.batch_size <= sum(other.batch_size for _, other in others):
             raise ValueError(
                 "the first sampleable buffer's batch size must exceed the "
                 "other buffers' total"
             )
         self._buffers = tuple(buffers)
         self._fallback = fallback
+        self._sampled = tuple(sampled)
 
     @property
     def batch_size(self) -> int:
@@ -76,3 +93,30 @@ class ComposedBuffer:
             for buffer, buffer_state in zip(self._buffers, state.states, strict=True)
         ]
         return jnp.sum(jnp.stack(sizes))
+
+    def can_sample(self, state: ComposedState) -> jax.Array:
+        return self._fallback.can_sample(state.states[self._sampled[0][0]])
+
+    def sample(self, state: ComposedState, key: jax.Array) -> Batch:
+        (fallback, _), *others = self._draw(state, key)
+        # Rows past the fallback's own share stand in for any buffer that
+        # cannot sample yet.
+        offset = self.batch_size - sum(len(batch.action) for batch, _ in others)
+        parts = [_rows(fallback, 0, offset)]
+        for batch, available in others:
+            stop = offset + len(batch.action)
+            parts.append(_choose(available, batch, _rows(fallback, offset, stop)))
+            offset = stop
+        return Batch(*(jnp.concatenate(fields) for fields in zip(*parts, strict=True)))
+
+    def _draw(
+        self, state: ComposedState, key: jax.Array
+    ) -> list[tuple[Batch, jax.Array]]:
+        keys = jax.random.split(key, len(self._sampled))
+        return [
+            (
+                buffer.sample(state.states[index], buffer_key),
+                buffer.can_sample(state.states[index]),
+            )
+            for (index, buffer), buffer_key in zip(self._sampled, keys, strict=True)
+        ]
