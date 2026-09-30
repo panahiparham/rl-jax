@@ -91,6 +91,10 @@ class ReplayBuffer:
         self._n_step = n_step
         self._gamma = gamma
 
+    @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
     def init(self, observation_space) -> BufferState:
         obs_shape = observation_space.shape
         frame_channels = getattr(observation_space, "frame_channels", None)
@@ -181,6 +185,9 @@ class ReplayBuffer:
             boot_obs=boot_obs,
             mask=mask,
         )
+
+    def size(self, state: BufferState) -> jax.Array:
+        return state.size
 
     def can_sample(self, state: BufferState) -> jax.Array:
         return state.size >= max(self._batch_size, self._n_step + 1)
