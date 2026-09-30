@@ -199,17 +199,17 @@ class ReplayBuffer:
         skip = self._stack_size - 1 if size == self._capacity else 0
         oldest = (int(state.head) - size) % self._capacity
         indices = (oldest + jnp.arange(skip, size)) % self._capacity
-        frame_indices = (
-            indices[:, None] + jnp.arange(1 - self._stack_size, 1)[None, :]
+        return self._timesteps_at(state, indices)
+
+    def _timesteps_at(self, state: BufferState, slots: jax.Array) -> TimeStep:
+        frame_slots = (
+            slots[..., None] + jnp.arange(1 - self._stack_size, 1)
         ) % self._capacity
-        frames = state.data.obs[frame_indices]
-        first = state.first[frame_indices]
-        obs = stack_frames(frames, first)
         return TimeStep(
-            obs=obs,
-            action=state.data.action[indices],
-            reward=state.data.reward[indices],
-            termination=state.data.termination[indices],
-            truncation=state.data.truncation[indices],
-            discount=state.data.discount[indices],
+            obs=stack_frames(state.data.obs[frame_slots], state.first[frame_slots]),
+            action=state.data.action[slots],
+            reward=state.data.reward[slots],
+            termination=state.data.termination[slots],
+            truncation=state.data.truncation[slots],
+            discount=state.data.discount[slots],
         )
