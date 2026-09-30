@@ -46,7 +46,10 @@ class ComposedBuffer:
         (_, fallback), *others = sampled
         if isinstance(fallback, ComposedBuffer):
             raise TypeError("the first sampleable buffer cannot be composed")
-        if fallback.batch_size <= sum(other.batch_size for _, other in others):
+        self._fallback_share = fallback.batch_size - sum(
+            other.batch_size for _, other in others
+        )
+        if self._fallback_share <= 0:
             raise ValueError(
                 "the first sampleable buffer's batch size must exceed the "
                 "other buffers' total"
@@ -101,13 +104,27 @@ class ComposedBuffer:
         (fallback, _), *others = self._draw(state, key)
         # Rows past the fallback's own share stand in for any buffer that
         # cannot sample yet.
-        offset = self.batch_size - sum(len(batch.action) for batch, _ in others)
+        offset = self._fallback_share
         parts = [_rows(fallback, 0, offset)]
         for batch, available in others:
             stop = offset + len(batch.action)
             parts.append(_choose(available, batch, _rows(fallback, offset, stop)))
             offset = stop
         return Batch(*(jnp.concatenate(fields) for fields in zip(*parts, strict=True)))
+
+    def sample_components(
+        self, state: ComposedState, key: jax.Array
+    ) -> tuple[Batch, ...]:
+        (fallback, _), *others = self._draw(state, key)
+        offset = self._fallback_share
+        fallback_mask = [fallback.mask[:offset]]
+        components = []
+        for batch, available in others:
+            stop = offset + len(batch.action)
+            fallback_mask.append(fallback.mask[offset:stop] & ~available)
+            components.append(batch._replace(mask=batch.mask & available))
+            offset = stop
+        return (fallback._replace(mask=jnp.concatenate(fallback_mask)), *components)
 
     def _draw(
         self, state: ComposedState, key: jax.Array
