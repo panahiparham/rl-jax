@@ -19,6 +19,10 @@ class TransitionBuffer:
         self._capacity = capacity
         self._batch_size = batch_size
 
+    @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
     def init(self, observation_space: ObservationSpace) -> TransitionState:
         obs_shape = (self._capacity, *observation_space.shape)
         data = Batch(
@@ -63,3 +67,10 @@ class TransitionBuffer:
 
     def size(self, state: TransitionState) -> jax.Array:
         return state.size
+
+    def sample(self, state: TransitionState, key: jax.Array) -> Batch:
+        slots = jax.random.randint(key, (self._batch_size,), 0, state.size)
+        return Batch(*(stored[slots] for stored in state.data))
+
+    def can_sample(self, state: TransitionState) -> jax.Array:
+        return state.size > 0
