@@ -20,6 +20,7 @@ class _ReferenceSample(NamedTuple):
     discount: float
     horizon: int
     boot_id: int
+    boot_action: int
     mask: bool
 
 
@@ -115,6 +116,7 @@ def _reference_sample(
         0.0 if last[3] else 0.9**horizon,
         horizon,
         transitions[start + horizon][0],
+        transitions[start + horizon][1],
         not last[4],
     )
 
@@ -278,6 +280,7 @@ def test_sampled_batches_match_a_reference_buffer(
         assert np.isclose(batch.ret[row], expected.ret, rtol=1e-6)
         assert np.isclose(batch.discount[row], expected.discount, rtol=1e-6)
         assert int(batch.boot_obs[row]) == expected.boot_id
+        assert batch.boot_action[row] == expected.boot_action
         assert bool(batch.mask[row]) is expected.mask
 
 
@@ -338,6 +341,7 @@ def test_frame_stacked_batches_match_a_synthetic_environment(
         expected = _reference_sample(retained, retained_start, n_step)
         assert np.isclose(batches.ret[row], expected.ret, rtol=1e-6)
         assert np.isclose(batches.discount[row], expected.discount, rtol=1e-6)
+        assert batches.boot_action[row] == expected.boot_action
         assert bool(batches.mask[row]) is expected.mask
         np.testing.assert_array_equal(batches.obs[row], observations[start_id])
         np.testing.assert_array_equal(
