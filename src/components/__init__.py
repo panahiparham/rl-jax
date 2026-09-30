@@ -1,6 +1,6 @@
 """Reusable agent components: networks, policies and replay buffers."""
 
-from components.buffer import (
+from components.buffers.uniform import (
     Batch,
     BufferState,
     ReplayBuffer,

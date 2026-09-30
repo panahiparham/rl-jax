@@ -81,7 +81,7 @@ module = [
     "agents.dqn",
     "agents.random",
     "agents.random_buffered",
-    "components.buffer",
+    "components.buffers.uniform",
     "components.networks",
     "environments",
     "environments.atari",
@@ -100,7 +100,7 @@ module = ["agents.agent0", "agents.ddqn", "agents.dqn"]
 disable_error_code = ["arg-type", "operator", "type-var"]
 
 [[tool.mypy.overrides]]
-module = ["components.buffer"]
+module = ["components.buffers.uniform"]
 disable_error_code = ["no-any-return"]
 
 [[tool.mypy.overrides]]

@@ -11,7 +11,7 @@ from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
 from components import ReplayBuffer, TimeStep, n_step_return
-from components.buffer import sample_windows, stack_frames
+from components.buffers.uniform import sample_windows, stack_frames
 from environments import ENVIRONMENTS
 
 
