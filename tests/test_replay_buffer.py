@@ -618,3 +618,12 @@ def test_stored_transitions_after_wrap_returns_full_capacity_oldest_first():
         np.asarray(result.obs).reshape(-1), [2.0, 3.0, 4.0, 5.0]
     )
     assert int(state.size) == 4
+
+
+@pytest.mark.parametrize(("num_adds", "expected"), [(0, 0), (3, 3), (6, 4)])
+def test_size_counts_additions_up_to_capacity(num_adds: int, expected: int):
+    """Size grows with each addition and saturates once the ring wraps."""
+    buffer = ReplayBuffer(capacity=4, batch_size=2, n_step=1, gamma=0.9)
+    state = _fill(buffer, [1.0] * num_adds, [False] * num_adds, [False] * num_adds)
+
+    assert int(buffer.size(state)) == expected
