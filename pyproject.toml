@@ -63,7 +63,7 @@ extend-select = ["A", "B", "BLE", "C4", "DTZ", "I", "N", "PLC0415", "S", "SIM", 
 "benchmarks/core/run.py" = ["I001"]
 "benchmarks/core/weekly.py" = ["I001"]
 "experiments/*/run.py" = ["I001"]
-"experiments/*/analysis.ipynb" = ["I001"]
+"experiments/*/analysis*.ipynb" = ["I001"]
 
 [tool.mypy]
 python_version = "3.13"
