@@ -4,6 +4,8 @@ from experiment.design import Component, Experiment, SlurmResources
 
 from agents.ddqn import DDQNConfig
 from agents.endpoint import EndpointConfig
+from agents.reservoir import ReservoirConfig
+from agents.unanchored import UnanchoredConfig
 from environments.atari import EPRAtariConfig
 from main import ExperimentConfig
 
@@ -49,6 +51,27 @@ def _ddqn(name: str, **hypers: int) -> Component:
             AGENT_HYPERS=DDQNConfig(
                 **{**_DDQN_HYPERS, **hypers}, REWARD_CLIP=True
             ),
+            ENV_HYPERS=EPRAtariConfig(),
+        ),
+        sweep={"ENV_HYPERS.GAME": _GAMES},
+        seeds=_SEEDS,
+        shard_size=1,
+        parallel_shards=4,
+    )
+
+
+# Endpoint replay's layout, storing 1-step transitions instead: every 10th for
+# unanchored, a reservoir sample for reservoir. Both train DDQN on all rows, as
+# in the original endpoint_*_noexpectilesarsanstep and reservoir_* runs.
+def _baseline(
+    name: str, agent: str, hypers: UnanchoredConfig | ReservoirConfig
+) -> Component:
+    return Component(
+        name=name,
+        config=ExperimentConfig(
+            AGENT=agent,
+            ENV="atari",
+            AGENT_HYPERS=hypers,
             ENV_HYPERS=EPRAtariConfig(),
         ),
         sweep={"ENV_HYPERS.GAME": _GAMES},
@@ -107,6 +130,18 @@ EXPERIMENT = Experiment(
             seeds=_SEEDS,
             shard_size=1,
             parallel_shards=4,
+        ),
+        _baseline("unanchored_atari", "unanchored", UnanchoredConfig()),
+        _baseline(
+            "unanchored_small_atari",
+            "unanchored",
+            UnanchoredConfig(LONG_TERM_SIZE=10_000),
+        ),
+        _baseline("reservoir_atari", "reservoir", ReservoirConfig()),
+        _baseline(
+            "reservoir_small_atari",
+            "reservoir",
+            ReservoirConfig(LONG_TERM_SIZE=10_000),
         ),
     ],
     # Four packed runs (parallel_shards=4) share one GPU through CUDA MPS,

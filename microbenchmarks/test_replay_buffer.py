@@ -11,6 +11,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 
 from components import BufferState, ReplayBuffer, TimeStep
 from components.buffers.composed import ComposedBuffer
+from components.buffers.reservoir import ReservoirBuffer
 from components.buffers.selector import NStepSelector
 from components.buffers.transition import TransitionBuffer
 
@@ -177,6 +178,23 @@ def test_jitted_endpoint_add_scan(benchmark: BenchmarkFixture):
             ),
             NStepSelector(n_step=10, gamma=0.99),
             TransitionBuffer(capacity=2_000, batch_size=4),
+        ]
+    )
+    state = buffer.init(_FrameSpace((84, 84, 4), np.dtype(np.uint8), 1))
+    observation = jnp.zeros((84, 84, 4), jnp.uint8)
+    add_scan = _compile_add_scan(buffer, state, observation, _ADD_STEPS)
+    _benchmark_scan(benchmark, add_scan, state, observation)
+
+
+def test_jitted_reservoir_add_scan(benchmark: BenchmarkFixture):
+    """Benchmark adds through recency, a 1-step selector, and a reservoir."""
+    buffer = ComposedBuffer(
+        [
+            ReplayBuffer(
+                capacity=10_000, batch_size=_BATCH_SIZE, n_step=1, gamma=0.99
+            ),
+            NStepSelector(n_step=1, gamma=0.99),
+            ReservoirBuffer(capacity=2_000, batch_size=4),
         ]
     )
     state = buffer.init(_FrameSpace((84, 84, 4), np.dtype(np.uint8), 1))
