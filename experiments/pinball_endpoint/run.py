@@ -1,9 +1,10 @@
-"""Run: DDQN buffer sizes vs endpoint replay on Pinball(Easy).
+"""Run: DDQN buffer sizes vs endpoint replay on Pinball(Easy), both budgets.
 
 Cheat sheet:
     Status: uv run experiments/pinball_endpoint/run.py status
-    Sweep: uv run experiments/pinball_endpoint/run.py sweep --num-workers 12
-    Single: uv run experiments/pinball_endpoint/run.py single --component endpoint
+    Sweep: uv run experiments/pinball_endpoint/run.py sweep --num-workers 70
+    Single: uv run experiments/pinball_endpoint/run.py single \
+        --component endpoint_pinball
     On the cluster: add --slurm to single or sweep, then sync
 """
 

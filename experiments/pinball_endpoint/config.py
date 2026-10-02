@@ -1,9 +1,9 @@
 """
-Define: DDQN with three uniform buffers vs endpoint replay on Pinball(Easy).
+Define: DDQN buffer sizes vs endpoint replay on Pinball(Easy), at two budgets.
 
-Reconstructs coresets' ``experiments/sarsa-test/pinball_1000``: ``large.json``,
-``small.json``, ``small_nstep.json``, and
-``coreset_sarsa_nstep_expectileloss.json``. Differences from the original: the
+Reconstructs coresets' ``sarsa-test/pinball_1000`` at a medium budget (1k
+memory) and a small one (500), with the same component layout as
+``atari_50m_endpoint``. Differences from the original: the
 environment is pinball-jax, the network is initialised differently (the
 original head was orthogonal(sqrt 2) with zero bias), and the endpoint agent
 chunks per episode as described in ``design/composable_endpoint-buffer.md``.
@@ -54,32 +54,39 @@ def _ddqn(name: str, **hypers: int) -> Component:
     )
 
 
+# 100 recency steps, then chained 10-step transitions; 4 of every 32 rows come
+# from the long-term buffer.
+def _endpoint(name: str, long_term_size: int) -> Component:
+    return Component(
+        name=name,
+        config=ExperimentConfig(
+            AGENT="endpoint",
+            ENV="pinball",
+            AGENT_HYPERS=EndpointConfig(
+                **_PINBALL_LEARNER,
+                BUFFER_SIZE=100,
+                LONG_TERM_SIZE=long_term_size,
+                LONG_TERM_N_STEP=10,
+                LONG_TERM_BATCH_SIZE=4,
+                EXPECTILE_TAU=0.7,
+            ),
+            ENV_HYPERS=_ENV_HYPERS,
+        ),
+        seeds=_SEEDS,
+        shard_size=10,
+    )
+
+
 EXPERIMENT = Experiment(
     name="pinball_endpoint",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
-        _ddqn("ddqn_large", BUFFER_SIZE=10_000),
-        _ddqn("ddqn_small", BUFFER_SIZE=1_000),
-        _ddqn("ddqn_small_nstep", BUFFER_SIZE=1_000, N_STEP=10),
-        # 100 recency steps, then 900 chained 10-step transitions; 4 of every
-        # 32 rows come from the long-term buffer.
-        Component(
-            name="endpoint",
-            config=ExperimentConfig(
-                AGENT="endpoint",
-                ENV="pinball",
-                AGENT_HYPERS=EndpointConfig(
-                    **_PINBALL_LEARNER,
-                    BUFFER_SIZE=100,
-                    LONG_TERM_SIZE=900,
-                    LONG_TERM_N_STEP=10,
-                    LONG_TERM_BATCH_SIZE=4,
-                    EXPECTILE_TAU=0.7,
-                ),
-                ENV_HYPERS=_ENV_HYPERS,
-            ),
-            seeds=_SEEDS,
-            shard_size=10,
-        ),
+        _ddqn("ddqn_pinball", BUFFER_SIZE=10_000),
+        _ddqn("ddqn_medium_pinball", BUFFER_SIZE=1_000),
+        _ddqn("ddqn_medium_nstep_pinball", BUFFER_SIZE=1_000, N_STEP=10),
+        _ddqn("ddqn_small_pinball", BUFFER_SIZE=500),
+        _ddqn("ddqn_small_nstep_pinball", BUFFER_SIZE=500, N_STEP=10),
+        _endpoint("endpoint_pinball", long_term_size=900),
+        _endpoint("endpoint_small_pinball", long_term_size=400),
     ],
 )
