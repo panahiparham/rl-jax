@@ -3,9 +3,8 @@ from pathlib import Path
 from experiment.design import Component, Experiment, SlurmResources
 
 from agents.ddqn import DDQNConfig
-from agents.dqn import DQNConfig
 from agents.endpoint import EndpointConfig
-from environments.atari import AtariConfig, EPRAtariConfig
+from environments.atari import EPRAtariConfig
 from main import ExperimentConfig
 
 _GAMES = [
@@ -24,7 +23,7 @@ _GAMES = [
 ]
 _SEEDS = list(range(10))
 
-_DQN_HYPERS = {
+_DDQN_HYPERS = {
     "TOTAL_TIMESTEPS": 12_500_000,      # 50M frames at FRAMESKIP=4
     "LR": 6.25e-05,
     "ADAM_EPS": 1.5e-4,
@@ -48,7 +47,7 @@ def _ddqn(name: str, **hypers: int) -> Component:
             AGENT="ddqn",
             ENV="atari",
             AGENT_HYPERS=DDQNConfig(
-                **{**_DQN_HYPERS, **hypers}, REWARD_CLIP=True
+                **{**_DDQN_HYPERS, **hypers}, REWARD_CLIP=True
             ),
             ENV_HYPERS=EPRAtariConfig(),
         ),
@@ -63,26 +62,12 @@ EXPERIMENT = Experiment(
     name="atari_50m_endpoint",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
-        # Reproduces atari_50m_deterministic's dqn_atari on these games.
-        Component(
-            name="dqn_atari",
-            config=ExperimentConfig(
-                AGENT="dqn",
-                ENV="atari",
-                AGENT_HYPERS=DQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
-                ENV_HYPERS=AtariConfig(),
-            ),
-            sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=_SEEDS,
-            shard_size=1,
-            parallel_shards=4,
-        ),
         Component(
             name="ddqn_atari",
             config=ExperimentConfig(
                 AGENT="ddqn",
                 ENV="atari",
-                AGENT_HYPERS=DDQNConfig(**_DQN_HYPERS, REWARD_CLIP=True),
+                AGENT_HYPERS=DDQNConfig(**_DDQN_HYPERS, REWARD_CLIP=True),
                 ENV_HYPERS=EPRAtariConfig(),
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
