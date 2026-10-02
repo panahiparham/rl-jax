@@ -60,6 +60,24 @@ def lifetime_average(curve: ArrayLike) -> NDArray[np.float64]:
         return np.asarray(np.nanmean(curve, axis=-1), dtype=np.float64)
 
 
+def episode_average(reward: ArrayLike, done: ArrayLike) -> NDArray[np.float64]:
+    """Each run's mean return over its completed episodes, along the last axis.
+
+    Every episode counts once whatever its length, unlike the time average of a
+    return curve, which weights episodes by their steps. An unfinished last
+    episode is ignored. NaN for a run with no completed episode.
+    """
+    reward = np.asarray(reward, dtype=float)
+    ended = np.asarray(done) > 0
+    average = np.full(reward.shape[:-1], np.nan)
+    for run in np.ndindex(reward.shape[:-1]):
+        ends = np.flatnonzero(ended[run])
+        if ends.size == 0:
+            continue
+        average[run] = np.diff(np.cumsum(reward[run])[ends], prepend=0.0).mean()
+    return average
+
+
 def subsample(
     curve: ArrayLike, points: int = 500
 ) -> tuple[NDArray[np.int64], NDArray[np.float64]]:

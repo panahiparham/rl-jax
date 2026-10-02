@@ -3,23 +3,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-
-class TimeStep(NamedTuple):
-    obs: jax.Array
-    action: jax.Array
-    reward: jax.Array
-    termination: jax.Array
-    truncation: jax.Array
-    discount: jax.Array
-
-
-class Batch(NamedTuple):
-    obs: jax.Array
-    action: jax.Array
-    ret: jax.Array
-    discount: jax.Array
-    boot_obs: jax.Array
-    mask: jax.Array
+from components.buffers.contract import Batch, Pushed, TimeStep
 
 
 class BufferState(NamedTuple):
@@ -29,6 +13,8 @@ class BufferState(NamedTuple):
     head: jax.Array
     size: jax.Array
     prev_done: jax.Array
+    # The stacked timestep that leaves on the next push.
+    outgoing: TimeStep
 
 
 def build_buffer(name: str, **kwargs):
@@ -107,6 +93,10 @@ class ReplayBuffer:
         self._n_step = n_step
         self._gamma = gamma
 
+    @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
     def init(self, observation_space) -> BufferState:
         obs_shape = observation_space.shape
         frame_channels = getattr(observation_space, "frame_channels", None)
@@ -135,6 +125,14 @@ class ReplayBuffer:
             head=jnp.asarray(0, jnp.int32),
             size=jnp.asarray(0, jnp.int32),
             prev_done=jnp.asarray(True),
+            outgoing=TimeStep(
+                obs=jnp.zeros(obs_shape, observation_space.dtype),
+                action=jnp.asarray(0, jnp.int32),
+                reward=jnp.asarray(0.0, jnp.float32),
+                termination=jnp.asarray(False),
+                truncation=jnp.asarray(False),
+                discount=jnp.asarray(0.0, jnp.float32),
+            ),
         )
 
     def add(
@@ -163,7 +161,37 @@ class ReplayBuffer:
             head=(state.head + 1) % self._capacity,
             size=jnp.minimum(state.size + 1, self._capacity),
             prev_done=termination | truncation,
+            outgoing=state.outgoing,
         )
+
+    def push(
+        self, state: BufferState, step: TimeStep, valid: jax.Array
+    ) -> Pushed[BufferState, TimeStep]:
+        slot = state.head
+        out_valid = valid & (state.size == self._capacity)
+
+        # An invalid step rewrites the slot with its current contents.
+        step = step._replace(obs=step.obs[..., -self._frame_channels :])
+        written = TimeStep(
+            *(
+                jnp.where(valid, new, old[slot])
+                for new, old in zip(step, state.data, strict=True)
+            )
+        )
+        prev_done = jnp.where(valid, state.prev_done, state.first[slot])
+        added = self.add(state._replace(prev_done=prev_done), *written)
+        pushed = added._replace(
+            head=jnp.where(valid, added.head, state.head),
+            size=jnp.where(valid, added.size, state.size),
+            prev_done=jnp.where(valid, added.prev_done, state.prev_done),
+        )
+
+        # The oldest slot with a full frame stack leaves on the next write.
+        # Reading it after this write, rather than before the next one, keeps
+        # the frame ring updated in place instead of copied.
+        oldest_full = (pushed.head + self._stack_size - 1) % self._capacity
+        outgoing = self._timesteps_at(pushed, oldest_full)
+        return Pushed(pushed._replace(outgoing=outgoing), state.outgoing, out_valid)
 
     def sample(self, state: BufferState, key: jax.Array) -> Batch:
         k = self._stack_size
@@ -195,8 +223,12 @@ class ReplayBuffer:
             ret=ret,
             discount=discount,
             boot_obs=boot_obs,
+            boot_action=state.data.action[boot_slots[:, -1]],
             mask=mask,
         )
+
+    def size(self, state: BufferState) -> jax.Array:
+        return state.size
 
     def can_sample(self, state: BufferState) -> jax.Array:
         return state.size >= max(self._batch_size, self._n_step + 1)
@@ -207,17 +239,17 @@ class ReplayBuffer:
         skip = self._stack_size - 1 if size == self._capacity else 0
         oldest = (int(state.head) - size) % self._capacity
         indices = (oldest + jnp.arange(skip, size)) % self._capacity
-        frame_indices = (
-            indices[:, None] + jnp.arange(1 - self._stack_size, 1)[None, :]
+        return self._timesteps_at(state, indices)
+
+    def _timesteps_at(self, state: BufferState, slots: jax.Array) -> TimeStep:
+        frame_slots = (
+            slots[..., None] + jnp.arange(1 - self._stack_size, 1)
         ) % self._capacity
-        frames = state.data.obs[frame_indices]
-        first = state.first[frame_indices]
-        obs = stack_frames(frames, first)
         return TimeStep(
-            obs=obs,
-            action=state.data.action[indices],
-            reward=state.data.reward[indices],
-            termination=state.data.termination[indices],
-            truncation=state.data.truncation[indices],
-            discount=state.data.discount[indices],
+            obs=stack_frames(state.data.obs[frame_slots], state.first[frame_slots]),
+            action=state.data.action[slots],
+            reward=state.data.reward[slots],
+            termination=state.data.termination[slots],
+            truncation=state.data.truncation[slots],
+            discount=state.data.discount[slots],
         )

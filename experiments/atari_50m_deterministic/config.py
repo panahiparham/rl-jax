@@ -57,7 +57,7 @@ EXPERIMENT = Experiment(
                 ENV_HYPERS=AtariConfig(),
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
-            seeds=[0],
+            seeds=list(range(10)),
             shard_size=1,
             parallel_shards=5,  # five runs fit in one L40S
         ),

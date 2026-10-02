@@ -7,7 +7,13 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from analysis.curves import ema, lifetime_average, return_curve, subsample
+from analysis.curves import (
+    ema,
+    episode_average,
+    lifetime_average,
+    return_curve,
+    subsample,
+)
 
 # --- ema ----------------------------------------------------------------------
 
@@ -131,6 +137,61 @@ def test_lifetime_average_is_nan_for_a_run_with_no_defined_step():
     averages = lifetime_average(curve)
     assert np.isnan(averages[0])
     assert averages[1] == 2.0
+
+
+# --- episode_average ----------------------------------------------------------
+
+
+def _completed_episode_returns(reward, done):
+    returns, episode_return = [], 0.0
+    for step_reward, step_done in zip(reward, done, strict=True):
+        episode_return += step_reward
+        if step_done:
+            returns.append(episode_return)
+            episode_return = 0.0
+    return returns
+
+
+def test_episode_average_weights_every_episode_equally():
+    """A 3-step episode returning 3 and a 1-step one returning 7 average to 5,
+    where the step-weighted average gives 4."""
+    assert np.isclose(episode_average([1.0, 1.0, 1.0, 7.0], [0, 0, 1, 1]), 5.0)
+
+
+def test_episode_average_ignores_an_unfinished_last_episode():
+    """Steps after the last completed episode have no return to count."""
+    assert np.isclose(episode_average([2.0, 4.0, 100.0], [0, 1, 0]), 6.0)
+
+
+def test_episode_average_is_nan_without_a_completed_episode():
+    """A run that never finished an episode has no average."""
+    assert np.isnan(episode_average(np.ones(4), np.zeros(4)))
+
+
+def test_episode_average_of_a_stack_matches_each_run_alone():
+    """Runs are rows, and the result has one value per run."""
+    rng = np.random.default_rng(0)
+    reward = rng.normal(size=(4, 30))
+    done = rng.random((4, 30)) < 0.2
+    average = episode_average(reward, done)
+    assert average.shape == (4,)
+    for row in range(4):
+        expected = episode_average(reward[row], done[row])
+        assert np.isclose(average[row], expected, equal_nan=True)
+
+
+@settings(derandomize=True)
+@given(
+    st.lists(
+        st.tuples(st.floats(-10, 10), st.booleans()), min_size=1, max_size=40
+    )
+)
+def test_episode_average_is_the_mean_completed_episode_return(steps):
+    """For any run, it equals the plain mean of its completed episodes' returns."""
+    reward, done = zip(*steps, strict=True)
+    returns = _completed_episode_returns(reward, done)
+    expected = np.mean(returns) if returns else np.nan
+    assert np.isclose(episode_average(reward, done), expected, equal_nan=True)
 
 
 # --- subsample ----------------------------------------------------------------
