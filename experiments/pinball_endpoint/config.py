@@ -3,7 +3,9 @@ Define: DDQN buffer sizes vs endpoint replay on Pinball(Easy), at two budgets.
 
 Reconstructs coresets' ``sarsa-test/pinball_1000`` at a medium budget (1k
 memory) and a small one (500), with the same component layout as
-``atari_50m_endpoint``. Differences from the original: the
+``atari_50m_endpoint``. The unanchored and reservoir baselines reconstruct
+``coreset_ddqn_onestep_squaredloss.json`` and
+``coreset_ddqn_reservoir_composite.json``. Differences from the original: the
 environment is pinball-jax, the network is initialised differently (the
 original head was orthogonal(sqrt 2) with zero bias), and the endpoint agent
 chunks per episode as described in ``design/composable_endpoint-buffer.md``.
@@ -17,6 +19,8 @@ from experiment.design import Component, Experiment
 
 from agents.ddqn import DDQNConfig
 from agents.endpoint import EndpointConfig
+from agents.reservoir import ReservoirConfig
+from agents.unanchored import UnanchoredConfig
 from environments.pinball import PinballConfig
 from main import ExperimentConfig
 
@@ -77,6 +81,47 @@ def _endpoint(name: str, long_term_size: int) -> Component:
     )
 
 
+# Endpoint replay's layout, storing 1-step transitions instead: every 10th for
+# unanchored, a reservoir sample for reservoir. Both train DDQN on all rows.
+def _unanchored(name: str, long_term_size: int) -> Component:
+    return Component(
+        name=name,
+        config=ExperimentConfig(
+            AGENT="unanchored",
+            ENV="pinball",
+            AGENT_HYPERS=UnanchoredConfig(
+                **_PINBALL_LEARNER,
+                BUFFER_SIZE=100,
+                LONG_TERM_SIZE=long_term_size,
+                LONG_TERM_BATCH_SIZE=4,
+                SUBSAMPLE=10,
+            ),
+            ENV_HYPERS=_ENV_HYPERS,
+        ),
+        seeds=_SEEDS,
+        shard_size=10,
+    )
+
+
+def _reservoir(name: str, long_term_size: int) -> Component:
+    return Component(
+        name=name,
+        config=ExperimentConfig(
+            AGENT="reservoir",
+            ENV="pinball",
+            AGENT_HYPERS=ReservoirConfig(
+                **_PINBALL_LEARNER,
+                BUFFER_SIZE=100,
+                LONG_TERM_SIZE=long_term_size,
+                LONG_TERM_BATCH_SIZE=4,
+            ),
+            ENV_HYPERS=_ENV_HYPERS,
+        ),
+        seeds=_SEEDS,
+        shard_size=10,
+    )
+
+
 EXPERIMENT = Experiment(
     name="pinball_endpoint",
     results_dir=Path(__file__).resolve().parent / "results",
@@ -88,5 +133,9 @@ EXPERIMENT = Experiment(
         _ddqn("ddqn_small_nstep_pinball", BUFFER_SIZE=500, N_STEP=10),
         _endpoint("endpoint_pinball", long_term_size=900),
         _endpoint("endpoint_small_pinball", long_term_size=400),
+        _unanchored("unanchored_pinball", long_term_size=900),
+        _unanchored("unanchored_small_pinball", long_term_size=400),
+        _reservoir("reservoir_pinball", long_term_size=900),
+        _reservoir("reservoir_small_pinball", long_term_size=400),
     ],
 )
