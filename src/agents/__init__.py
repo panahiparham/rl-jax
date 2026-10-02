@@ -7,6 +7,7 @@ from agents.dqn_noheadbias import DQNNoHeadBiasAgent, DQNNoHeadBiasConfig
 from agents.endpoint import EndpointAgent, EndpointConfig
 from agents.random import RandomAgent, RandomConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
+from agents.unanchored import UnanchoredAgent, UnanchoredConfig
 
 
 class AgentSpec(NamedTuple):
@@ -26,6 +27,7 @@ AGENTS: dict[str, AgentSpec] = {
     "dqn_noheadbias": AgentSpec(DQNNoHeadBiasConfig, DQNNoHeadBiasAgent),
     "agent0": AgentSpec(Agent0Config, Agent0Agent),
     "endpoint": AgentSpec(EndpointConfig, EndpointAgent),
+    "unanchored": AgentSpec(UnanchoredConfig, UnanchoredAgent),
 }
 
 
@@ -45,5 +47,6 @@ __all__ = [
     "EndpointConfig",
     "RandomBufferConfig",
     "RandomConfig",
+    "UnanchoredConfig",
     "get_config",
 ]
