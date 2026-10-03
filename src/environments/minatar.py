@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import NamedTuple
 
 import gymnax
@@ -17,6 +17,12 @@ _GAMES = {
 # Only Freeway has a time limit of its own; gymnax would cap the others at 1000.
 _GAME_TIME_LIMITS = {"freeway": 2500}
 _UNBOUNDED = 2**31 - 1
+_NON_PARAM_FIELDS = {
+    "GAME",
+    "USE_MINIMAL_ACTION_SET",
+    "STICKY_ACTION_PROB",
+    "EPISODE_CUTOFF",
+}
 
 
 @dataclass(frozen=True)
@@ -25,6 +31,15 @@ class MinAtarConfig:
     USE_MINIMAL_ACTION_SET: bool = True
     STICKY_ACTION_PROB: float = 0.1
     EPISODE_CUTOFF: int | None = None
+    # gymnax EnvParams of the games; None keeps the game's default
+    RAMPING: bool | None = None
+    RAMP_INTERVAL: int | None = None
+    INIT_SPAWN_SPEED: int | None = None
+    INIT_MOVE_INTERVAL: int | None = None
+    SHOT_COOL_DOWN: int | None = None
+    ENEMY_MOVE_INTERVAL: int | None = None
+    ENEMY_SHOT_INTERVAL: int | None = None
+    PLAYER_SPEED: int | None = None
 
 
 class MinAtarState(NamedTuple):
@@ -85,6 +100,13 @@ def build(config: MinAtarConfig):
     game_limit = _GAME_TIME_LIMITS.get(config.GAME, _UNBOUNDED)
     cutoff = config.EPISODE_CUTOFF
     truncate_at = cutoff if cutoff is not None and cutoff < game_limit else _UNBOUNDED
-    params = params.replace(max_steps_in_episode=min(truncate_at, game_limit))
+    overrides = {
+        name.lower(): value
+        for name, value in asdict(config).items()
+        if name not in _NON_PARAM_FIELDS and value is not None
+    }
+    params = params.replace(
+        max_steps_in_episode=min(truncate_at, game_limit), **overrides
+    )
     env = MinAtarEnv(env, config.STICKY_ACTION_PROB, truncate_at)
     return AutoresetImmediate(env, params)
