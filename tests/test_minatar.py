@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
+from agents.random import RandomConfig
 from environments import ENVIRONMENTS
 from environments.minatar import MinAtarConfig
+from main import ExperimentConfig, process_shard
 
 CHANNELS = {"asterix": 4, "breakout": 4, "freeway": 7, "space_invaders": 6}
 MINIMAL_ACTIONS = {"asterix": 5, "breakout": 3, "freeway": 3, "space_invaders": 4}
@@ -17,6 +20,18 @@ GAMES = list(CHANNELS)
 
 def build(**fields):
     return ENVIRONMENTS["minatar"].build(MinAtarConfig(**fields))
+
+
+def rollout(env, policy, steps):
+    state, _obs = env.init(jax.random.key(0))
+
+    def step(state, key):
+        state, _r, term, trunc, _discount, _obs = env.step(state, key, policy(state))
+        return state, (term, trunc)
+
+    keys = jax.random.split(jax.random.key(1), steps)
+    _state, (terminated, truncated) = jax.lax.scan(step, state, keys)
+    return np.asarray(terminated), np.asarray(truncated)
 
 
 class TestSpaces:
@@ -55,3 +70,46 @@ class TestConfig:
     def test_registered_as_vmappable(self):
         """The games are pure jax, so runs can be vmapped over seeds."""
         assert ENVIRONMENTS["minatar"].vmappable
+
+
+class TestTermination:
+    def test_freeway_ends_as_a_termination_at_its_own_time_limit(self):
+        """Freeway's 2500 steps are part of the game, as in the original, so the
+        episode terminates there and is never reported as truncated."""
+        terminated, truncated = rollout(
+            build(GAME="freeway"), lambda _state: jnp.int32(0), 2600
+        )
+
+        assert np.flatnonzero(terminated).tolist() == [2499]
+        assert not truncated.any()
+
+    def test_a_game_without_a_limit_runs_past_gymnaxs_default_cap(self):
+        """A paddle that tracks the ball keeps Breakout alive for 1500 steps, so
+        nothing ends the episode at gymnax's default limit of 1000."""
+
+        def track_ball(state):
+            return jnp.where(
+                state.ball_x < state.pos, 1, jnp.where(state.ball_x > state.pos, 2, 0)
+            )
+
+        terminated, truncated = rollout(build(GAME="breakout"), track_ball, 1500)
+
+        assert not terminated.any()
+        assert not truncated.any()
+
+
+class TestInteraction:
+    @pytest.mark.parametrize("game", GAMES)
+    def test_random_agent_runs_vmapped_under_jit(self, game):
+        """A random agent steps every game through the full interaction loop,
+        vmapped over seeds."""
+        config = ExperimentConfig(
+            AGENT="random",
+            ENV="minatar",
+            AGENT_HYPERS=RandomConfig(TOTAL_TIMESTEPS=50),
+            ENV_HYPERS=MinAtarConfig(GAME=game),
+        )
+        runs = process_shard([config] * 3, [0, 1, 2])
+
+        assert [run["reward"].shape for run in runs] == [(50,)] * 3
+        assert [run["done"].shape for run in runs] == [(50,)] * 3
