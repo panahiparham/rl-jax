@@ -13,6 +13,8 @@ from environments.classic_control import (
     build_cartpole,
     build_mountaincar,
 )
+from environments.minatar import MinAtarConfig
+from environments.minatar import build as build_minatar
 from environments.pinball import PinballConfig
 from environments.pinball import build as build_pinball
 
@@ -29,6 +31,7 @@ ENVIRONMENTS: dict[str, EnvSpec] = {
     "cartpole": EnvSpec(CartpoleConfig, build_cartpole),  # gymnax
     "acrobot": EnvSpec(AcrobotConfig, build_acrobot),  # gymnax
     "catch": EnvSpec(CatchConfig, build_catch),
+    "minatar": EnvSpec(MinAtarConfig, build_minatar),  # gymnax
     "atari": EnvSpec(AtariConfig, build_atari, vmappable=False),  # stateful ale-py FFI
 }
 
@@ -48,6 +51,7 @@ __all__ = [
     "CartpoleConfig",
     "CatchConfig",
     "EnvSpec",
+    "MinAtarConfig",
     "MountainCarConfig",
     "PinballConfig",
     "get_config",
