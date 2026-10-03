@@ -24,6 +24,7 @@ class MinAtarConfig:
     GAME: str = "breakout"
     USE_MINIMAL_ACTION_SET: bool = True
     STICKY_ACTION_PROB: float = 0.1
+    EPISODE_CUTOFF: int | None = None
 
 
 class MinAtarState(NamedTuple):
@@ -32,9 +33,15 @@ class MinAtarState(NamedTuple):
 
 
 class MinAtarEnv:
-    def __init__(self, env: environment.Environment, sticky_action_prob: float):
+    def __init__(
+        self,
+        env: environment.Environment,
+        sticky_action_prob: float,
+        truncate_at: int,
+    ):
         self._env = env
         self._sticky_action_prob = sticky_action_prob
+        self._truncate_at = truncate_at
 
     def observation_space(self, params: environment.EnvParams):
         shape = self._env.observation_space(params).shape
@@ -62,7 +69,9 @@ class MinAtarEnv:
             game_key, state.game, action, params
         )
         state = MinAtarState(game, action)
-        return obs.astype(bool), state, reward, done, jnp.zeros_like(done), {}
+        truncated = game.time >= self._truncate_at
+        terminated = done & ~truncated
+        return obs.astype(bool), state, reward, terminated, truncated, {}
 
 
 def build(config: MinAtarConfig):
@@ -73,8 +82,9 @@ def build(config: MinAtarConfig):
     env, params = gymnax.make(
         _GAMES[config.GAME], use_minimal_action_set=config.USE_MINIMAL_ACTION_SET
     )
-    params = params.replace(
-        max_steps_in_episode=_GAME_TIME_LIMITS.get(config.GAME, _UNBOUNDED)
-    )
-    env = MinAtarEnv(env, config.STICKY_ACTION_PROB)
+    game_limit = _GAME_TIME_LIMITS.get(config.GAME, _UNBOUNDED)
+    cutoff = config.EPISODE_CUTOFF
+    truncate_at = cutoff if cutoff is not None and cutoff < game_limit else _UNBOUNDED
+    params = params.replace(max_steps_in_episode=min(truncate_at, game_limit))
+    env = MinAtarEnv(env, config.STICKY_ACTION_PROB, truncate_at)
     return AutoresetImmediate(env, params)
