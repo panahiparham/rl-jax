@@ -35,6 +35,17 @@ def rollout(env, policy, steps):
     return np.asarray(terminated), np.asarray(truncated)
 
 
+def noop(_state):
+    return jnp.int32(0)
+
+
+def track_ball(state):
+    game = state.game
+    return jnp.where(
+        game.ball_x < game.pos, 1, jnp.where(game.ball_x > game.pos, 2, 0)
+    )
+
+
 class TestSpaces:
     @pytest.mark.parametrize("game", GAMES)
     def test_observation_is_a_bool_grid_with_the_games_channels(self, game):
@@ -77,9 +88,7 @@ class TestTermination:
     def test_freeway_ends_as_a_termination_at_its_own_time_limit(self):
         """Freeway's 2500 steps are part of the game, as in the original, so the
         episode terminates there and is never reported as truncated."""
-        terminated, truncated = rollout(
-            build(GAME="freeway"), lambda _state: jnp.int32(0), 2600
-        )
+        terminated, truncated = rollout(build(GAME="freeway"), noop, 2600)
 
         assert np.flatnonzero(terminated).tolist() == [2499]
         assert not truncated.any()
@@ -88,13 +97,6 @@ class TestTermination:
         """Without sticky actions a paddle that tracks the ball keeps Breakout
         alive for 1500 steps, so nothing ends the episode at gymnax's default
         limit of 1000."""
-
-        def track_ball(state):
-            game = state.game
-            return jnp.where(
-                game.ball_x < game.pos, 1, jnp.where(game.ball_x > game.pos, 2, 0)
-            )
-
         env = build(GAME="breakout", STICKY_ACTION_PROB=0.0)
         terminated, truncated = rollout(env, track_ball, 1500)
 
@@ -161,3 +163,40 @@ class TestStickyActions:
         state, *_ = env.step(state, jax.random.key(1), self.LEFT)
 
         assert int(state.game.pos) == start
+
+
+class TestEpisodeCutoff:
+    def test_cutoff_ends_episodes_as_truncations(self):
+        """A cutoff is a time limit, not part of the game, so every 10th step
+        is a truncation and nothing is a termination."""
+        env = build(GAME="freeway", EPISODE_CUTOFF=10)
+        terminated, truncated = rollout(env, noop, 25)
+
+        assert np.flatnonzero(truncated).tolist() == [9, 19]
+        assert not terminated.any()
+
+    def test_cutoff_applies_to_games_without_a_limit(self):
+        """A game that never ends on its own is still cut at the cutoff."""
+        env = build(GAME="breakout", STICKY_ACTION_PROB=0.0, EPISODE_CUTOFF=100)
+        terminated, truncated = rollout(env, track_ball, 150)
+
+        assert np.flatnonzero(truncated).tolist() == [99]
+        assert not terminated.any()
+
+    def test_game_over_before_the_cutoff_is_a_termination(self):
+        """Losing the game ends the episode as a termination even when a cutoff
+        is set."""
+        env = build(GAME="breakout", EPISODE_CUTOFF=1000)
+        terminated, truncated = rollout(env, noop, 100)
+
+        assert terminated.any()
+        assert not truncated.any()
+
+    def test_cutoff_above_freeways_limit_leaves_its_termination(self):
+        """Freeway's own limit comes first, so it still ends as a termination at
+        2500 steps."""
+        env = build(GAME="freeway", EPISODE_CUTOFF=3000)
+        terminated, truncated = rollout(env, noop, 2600)
+
+        assert np.flatnonzero(terminated).tolist() == [2499]
+        assert not truncated.any()
