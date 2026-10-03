@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import numpy as np
+import pytest
+
 from agents import AGENTS
 from agents.dqn import DQNAgent, DQNConfig, MinAtarDQNConfig
+from environments.minatar import MinAtarConfig
+from main import ExperimentConfig, process_shard
 
 
 class TestMinAtarDQNConfig:
@@ -37,3 +42,27 @@ class TestMinAtarDQNConfig:
 
         assert isinstance(config, DQNConfig)
         assert isinstance(AGENTS["dqn"].build(config), DQNAgent)
+
+
+class TestSmokeRun:
+    @pytest.mark.parametrize(
+        "game", ["asterix", "breakout", "freeway", "space_invaders"]
+    )
+    def test_dqn_trains_on_every_game_vmapped_over_seeds(self, game):
+        """A short run per game goes through the real stack: the environment,
+        the MinAtar network, the replay buffer and the shard runner."""
+        config = ExperimentConfig(
+            AGENT="dqn",
+            ENV="minatar",
+            AGENT_HYPERS=MinAtarDQNConfig(
+                TOTAL_TIMESTEPS=60,
+                BUFFER_SIZE=64,
+                LEARNING_STARTS=8,
+                TARGET_NETWORK_FREQUENCY=16,
+            ),
+            ENV_HYPERS=MinAtarConfig(GAME=game),
+        )
+        runs = process_shard([config] * 2, [0, 1])
+
+        assert [run["reward"].shape for run in runs] == [(60,)] * 2
+        assert all(np.isfinite(run["reward"]).all() for run in runs)
