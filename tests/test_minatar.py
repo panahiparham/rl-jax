@@ -200,3 +200,33 @@ class TestEpisodeCutoff:
 
         assert np.flatnonzero(terminated).tolist() == [2499]
         assert not truncated.any()
+
+
+class TestGameParams:
+    UP = 1
+
+    def climb(self, **fields):
+        env = build(GAME="freeway", STICKY_ACTION_PROB=0.0, **fields)
+        state, _obs = env.init(jax.random.key(0))
+        rows = []
+        for n in range(4):
+            state, *_ = env.step(state, jax.random.key(n), self.UP)
+            rows.append(int(state.game.pos))
+        return rows
+
+    def test_a_param_changes_the_game(self):
+        """A faster player climbs further in the same number of steps."""
+        assert self.climb(PLAYER_SPEED=1)[-1] < self.climb()[-1]
+
+    def test_unset_params_keep_the_games_default(self):
+        """Leaving a field as None is the same as passing gymnax's default."""
+        assert self.climb() == self.climb(PLAYER_SPEED=3)
+
+    def test_params_of_other_games_are_accepted_where_they_exist(self):
+        """Asterix has a shot cooldown and a ramping switch."""
+        build(GAME="asterix", SHOT_COOL_DOWN=2, RAMPING=False)
+
+    def test_a_param_the_game_lacks_is_rejected(self):
+        """Breakout has no shot cooldown, so setting one fails and names it."""
+        with pytest.raises(ValueError, match="breakout.*SHOT_COOL_DOWN"):
+            build(GAME="breakout", SHOT_COOL_DOWN=2)
