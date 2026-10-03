@@ -1,7 +1,7 @@
-"""``NETWORK_PRESET`` dispatch for the LN variants: DQNAgent (and DDQNAgent,
-which inherits ``_build_q``) actually build and step with "mlp_ln" and
-"nature_cnn_ln", not just the plain "mlp"/"nature_cnn" presets already
-exercised elsewhere.
+"""``NETWORK_PRESET`` dispatch for the LN variants and "minatar_cnn": DQNAgent
+(and DDQNAgent, which inherits ``_build_q``) actually build and step with
+"mlp_ln", "nature_cnn_ln" and "minatar_cnn", not just the plain
+"mlp"/"nature_cnn" presets already exercised elsewhere.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from agents.dqn import DQNAgent, DQNConfig
 from environments import ENVIRONMENTS
 from environments.autoreset import AutoresetImmediate
 from environments.catch import CatchConfig
+from environments.minatar import MinAtarConfig
 from main import interaction
 
 
@@ -83,3 +84,22 @@ def test_nature_cnn_ln_preset_runs_under_jit():
     metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
     assert metrics["reward"].shape == (20,)
     assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()
+
+
+def test_minatar_cnn_preset_runs_under_jit_on_minatar():
+    env = ENVIRONMENTS["minatar"].build(MinAtarConfig(GAME="breakout"))
+    agent = DQNAgent(
+        DQNConfig(
+            TOTAL_TIMESTEPS=20,
+            BUFFER_SIZE=32,
+            BATCH_SIZE=4,
+            LEARNING_STARTS=4,
+            NETWORK_PRESET="minatar_cnn",
+        )
+    )
+    run = jax.jit(lambda key: interaction(key, agent, env, 20))
+    metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
+    out_weight = np.asarray(final_carry[1].q.out.weight)
+    assert metrics["reward"].shape == (20,)
+    assert out_weight.shape == (3, 128)
+    assert np.isfinite(out_weight).all()
