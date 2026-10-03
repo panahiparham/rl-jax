@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import NamedTuple
 
 import gymnax
@@ -105,6 +105,10 @@ def build(config: MinAtarConfig):
         for name, value in asdict(config).items()
         if name not in _NON_PARAM_FIELDS and value is not None
     }
+    unsupported = overrides.keys() - {field.name for field in fields(params)}
+    if unsupported:
+        names = sorted(name.upper() for name in unsupported)
+        raise ValueError(f"{config.GAME} has no {names} parameter(s)")
     params = params.replace(
         max_steps_in_episode=min(truncate_at, game_limit), **overrides
     )
