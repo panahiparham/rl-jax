@@ -1,6 +1,24 @@
+from dataclasses import dataclass
+
+import gymnax
 import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces
+
+from environments.autoreset import AutoresetImmediate
+
+_GAMES = {
+    "asterix": "Asterix-MinAtar",
+    "breakout": "Breakout-MinAtar",
+    "freeway": "Freeway-MinAtar",
+    "space_invaders": "SpaceInvaders-MinAtar",
+}
+
+
+@dataclass(frozen=True)
+class MinAtarConfig:
+    GAME: str = "breakout"
+    USE_MINIMAL_ACTION_SET: bool = True
 
 
 class MinAtarEnv:
@@ -29,3 +47,14 @@ class MinAtarEnv:
             key, state, action, params
         )
         return obs.astype(bool), state, reward, done, jnp.zeros_like(done), {}
+
+
+def build(config: MinAtarConfig):
+    if config.GAME not in _GAMES:
+        raise ValueError(
+            f"unknown MinAtar game {config.GAME!r}; supported: {sorted(_GAMES)}"
+        )
+    env, params = gymnax.make(
+        _GAMES[config.GAME], use_minimal_action_set=config.USE_MINIMAL_ACTION_SET
+    )
+    return AutoresetImmediate(MinAtarEnv(env), params)
