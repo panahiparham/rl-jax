@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import gymnax
 import jax
@@ -22,11 +23,18 @@ _UNBOUNDED = 2**31 - 1
 class MinAtarConfig:
     GAME: str = "breakout"
     USE_MINIMAL_ACTION_SET: bool = True
+    STICKY_ACTION_PROB: float = 0.1
+
+
+class MinAtarState(NamedTuple):
+    game: environment.EnvState
+    last_action: jax.Array
 
 
 class MinAtarEnv:
-    def __init__(self, env: environment.Environment):
+    def __init__(self, env: environment.Environment, sticky_action_prob: float):
         self._env = env
+        self._sticky_action_prob = sticky_action_prob
 
     def observation_space(self, params: environment.EnvParams):
         shape = self._env.observation_space(params).shape
@@ -36,19 +44,24 @@ class MinAtarEnv:
         return self._env.action_space(params)
 
     def reset(self, key: jax.Array, params: environment.EnvParams):
-        obs, state = self._env.reset_env(key, params)
-        return obs.astype(bool), state
+        obs, game = self._env.reset_env(key, params)
+        return obs.astype(bool), MinAtarState(game, jnp.int32(0))
 
     def step(
         self,
         key: jax.Array,
-        state: environment.EnvState,
+        state: MinAtarState,
         action: jax.Array,
         params: environment.EnvParams,
     ):
-        obs, state, reward, done, _info = self._env.step_env(
-            key, state, action, params
+        sticky_key, game_key = jax.random.split(key)
+        repeat = jax.random.uniform(sticky_key) < self._sticky_action_prob
+        action = jnp.where(repeat, state.last_action, action)
+
+        obs, game, reward, done, _info = self._env.step_env(
+            game_key, state.game, action, params
         )
+        state = MinAtarState(game, action)
         return obs.astype(bool), state, reward, done, jnp.zeros_like(done), {}
 
 
@@ -63,4 +76,5 @@ def build(config: MinAtarConfig):
     params = params.replace(
         max_steps_in_episode=_GAME_TIME_LIMITS.get(config.GAME, _UNBOUNDED)
     )
-    return AutoresetImmediate(MinAtarEnv(env), params)
+    env = MinAtarEnv(env, config.STICKY_ACTION_PROB)
+    return AutoresetImmediate(env, params)

@@ -84,15 +84,18 @@ class TestTermination:
         assert not truncated.any()
 
     def test_a_game_without_a_limit_runs_past_gymnaxs_default_cap(self):
-        """A paddle that tracks the ball keeps Breakout alive for 1500 steps, so
-        nothing ends the episode at gymnax's default limit of 1000."""
+        """Without sticky actions a paddle that tracks the ball keeps Breakout
+        alive for 1500 steps, so nothing ends the episode at gymnax's default
+        limit of 1000."""
 
         def track_ball(state):
+            game = state.game
             return jnp.where(
-                state.ball_x < state.pos, 1, jnp.where(state.ball_x > state.pos, 2, 0)
+                game.ball_x < game.pos, 1, jnp.where(game.ball_x > game.pos, 2, 0)
             )
 
-        terminated, truncated = rollout(build(GAME="breakout"), track_ball, 1500)
+        env = build(GAME="breakout", STICKY_ACTION_PROB=0.0)
+        terminated, truncated = rollout(env, track_ball, 1500)
 
         assert not terminated.any()
         assert not truncated.any()
