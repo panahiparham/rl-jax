@@ -10,6 +10,7 @@ from experiment.hypers import traced
 
 from components import (
     BufferState,
+    MinAtarCNN,
     NatureCNN,
     NatureCNNLN,
     QNetwork,
@@ -44,7 +45,8 @@ class DQNConfig:
     EPSILON_END: float = traced(0.05)
     EPSILON_DECAY_STEPS: int = traced(100_000)
     HIDDEN_SIZE: int = 64
-    # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
+    # "mlp"/"mlp_ln" (vector obs), "nature_cnn"/"nature_cnn_ln" (image obs) or
+    # "minatar_cnn" (MinAtar's 10x10 grid)
     NETWORK_PRESET: str = "mlp"
     ADAM_EPS: float = traced(1e-8)
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
@@ -71,6 +73,8 @@ class DQNAgent:
         self._optimizer = optax.adam(config.LR, eps=config.ADAM_EPS)
 
     def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
+        if self._config.NETWORK_PRESET == "minatar_cnn":
+            return MinAtarCNN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "nature_cnn":
             return NatureCNN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "nature_cnn_ln":

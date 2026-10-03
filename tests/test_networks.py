@@ -16,8 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from components import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
-from components.networks import MinAtarCNN
+from components import MinAtarCNN, NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
 
 
 def test_qnetwork_ln_output_shape_and_finite():
