@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from gymnax.environments.minatar.breakout import MinBreakout
 
 from agents.random import RandomConfig
 from environments import ENVIRONMENTS
@@ -116,3 +117,47 @@ class TestInteraction:
 
         assert [run["reward"].shape for run in runs] == [(50,)] * 3
         assert [run["done"].shape for run in runs] == [(50,)] * 3
+
+
+class TestStickyActions:
+    LEFT, RIGHT = 1, 2
+
+    def test_zero_probability_leaves_the_game_unchanged(self):
+        """Without sticky actions the observations match raw gymnax step for
+        step, so the wrapper adds nothing else."""
+        env = build(GAME="breakout", STICKY_ACTION_PROB=0.0)
+        raw = MinBreakout()
+        params = raw.default_params
+        state, obs = env.init(jax.random.key(0))
+        raw_obs, raw_state = raw.reset_env(jax.random.key(0), params)
+        assert np.array_equal(obs, raw_obs)
+
+        for n, action in enumerate([self.LEFT, self.LEFT, self.RIGHT, 0, 0]):
+            key = jax.random.key(n)
+            state, _r, _term, _trunc, _discount, obs = env.step(state, key, action)
+            raw_obs, raw_state, *_ = raw.step_env(key, raw_state, action, params)
+            assert np.array_equal(obs, raw_obs)
+
+    def test_certain_stickiness_repeats_the_previous_action(self):
+        """At probability one the chosen action is ignored and the previous one
+        runs instead."""
+        env = build(GAME="breakout", STICKY_ACTION_PROB=1.0)
+        state, _obs = env.init(jax.random.key(0))
+        start = int(state.game.pos)
+
+        state = state._replace(last_action=jnp.int32(self.LEFT))
+        state, *_ = env.step(state, jax.random.key(1), self.RIGHT)
+
+        assert int(state.game.pos) == start - 1
+        assert int(state.last_action) == self.LEFT
+
+    def test_fresh_episode_starts_with_no_previous_action(self):
+        """Nothing is repeated on the first step: the previous action is the
+        no-op, so a certain repeat leaves the paddle where it started."""
+        env = build(GAME="breakout", STICKY_ACTION_PROB=1.0)
+        state, _obs = env.init(jax.random.key(0))
+        start = int(state.game.pos)
+
+        state, *_ = env.step(state, jax.random.key(1), self.LEFT)
+
+        assert int(state.game.pos) == start
