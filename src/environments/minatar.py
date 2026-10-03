@@ -13,6 +13,9 @@ _GAMES = {
     "freeway": "Freeway-MinAtar",
     "space_invaders": "SpaceInvaders-MinAtar",
 }
+# Only Freeway has a time limit of its own; gymnax would cap the others at 1000.
+_GAME_TIME_LIMITS = {"freeway": 2500}
+_UNBOUNDED = 2**31 - 1
 
 
 @dataclass(frozen=True)
@@ -56,5 +59,8 @@ def build(config: MinAtarConfig):
         )
     env, params = gymnax.make(
         _GAMES[config.GAME], use_minimal_action_set=config.USE_MINIMAL_ACTION_SET
+    )
+    params = params.replace(
+        max_steps_in_episode=_GAME_TIME_LIMITS.get(config.GAME, _UNBOUNDED)
     )
     return AutoresetImmediate(MinAtarEnv(env), params)
