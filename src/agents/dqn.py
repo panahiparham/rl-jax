@@ -52,6 +52,26 @@ class DQNConfig:
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
 
 
+@dataclass(frozen=True, kw_only=True)
+class MinAtarDQNConfig(DQNConfig):
+    """DQN hyperparameters of reg-duel-q's MinAtar baseline."""
+
+    LR: float = traced(0.00025)
+    ADAM_EPS: float = traced(3.125e-4)
+    BUFFER_SIZE: int = 100_000
+    BATCH_SIZE: int = 32
+    TOTAL_TIMESTEPS: int = 10_000_000
+    LEARNING_STARTS: int = traced(1_000)
+    TRAIN_FREQUENCY: int = traced(4)
+    TARGET_NETWORK_FREQUENCY: int = traced(1_000)
+    GAMMA: float = traced(0.99)
+    EPSILON_START: float = traced(1.0)
+    EPSILON_END: float = traced(0.01)
+    EPSILON_DECAY_STEPS: int = traced(250_000)
+    NETWORK_PRESET: str = "minatar_cnn"
+    REWARD_CLIP: bool = False
+
+
 class DQNState(NamedTuple):
     q: eqx.Module
     target_q: eqx.Module
