@@ -6,6 +6,7 @@ from experiment.design import Component, Experiment, SlurmResources
 from agents.ddqn import DDQNConfig
 from agents.dqn import MinAtarDQNConfig
 from agents.endpoint import EndpointConfig
+from agents.unanchored import UnanchoredConfig
 from environments.minatar import MinAtarConfig
 from main import ExperimentConfig
 
@@ -53,6 +54,21 @@ def _endpoint(name: str, long_term_size: int) -> Component:
     return _component(name, "endpoint", hypers)
 
 
+# Endpoint replay's layout, storing every 10th 1-step transition instead and
+# training DDQN on all rows.
+def _unanchored(name: str, long_term_size: int) -> Component:
+    hypers = UnanchoredConfig(
+        **{
+            **_LEARNER,
+            "BUFFER_SIZE": 1_000,
+            "LONG_TERM_SIZE": long_term_size,
+            "LONG_TERM_BATCH_SIZE": 4,
+            "SUBSAMPLE": 10,
+        }
+    )
+    return _component(name, "unanchored", hypers)
+
+
 EXPERIMENT = Experiment(
     name="minatar_endpoint",
     results_dir=Path(__file__).resolve().parent / "results",
@@ -62,6 +78,8 @@ EXPERIMENT = Experiment(
         _ddqn("ddqn_small_minatar", buffer_size=2_000),
         _endpoint("endpoint_minatar", long_term_size=9_000),
         _endpoint("endpoint_small_minatar", long_term_size=1_000),
+        _unanchored("unanchored_minatar", long_term_size=9_000),
+        _unanchored("unanchored_small_minatar", long_term_size=1_000),
     ],
     slurm=SlurmResources(time="12:00:00", gpus=1),
 )
