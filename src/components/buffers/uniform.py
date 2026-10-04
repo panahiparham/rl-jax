@@ -53,7 +53,7 @@ def stack_frames(frames: jax.Array, first: jax.Array) -> jax.Array:
     last_start = jnp.max(jnp.where(first, positions, -1), axis=-1)
     valid = positions >= last_start[..., None]
     valid = valid.reshape(first.shape + (1,) * (frames.ndim - first.ndim))
-    frames = jnp.where(valid, frames, 0)
+    frames = jnp.where(valid, frames, jnp.zeros_like(frames))
     frames = jnp.moveaxis(frames, k_axis, -2)
     return frames.reshape(frames.shape[:-2] + (k_size * frames.shape[-1],))
 
