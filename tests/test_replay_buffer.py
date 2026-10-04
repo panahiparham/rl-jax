@@ -462,6 +462,15 @@ def test_stack_frames_handles_leading_batch_dims_independently():
     np.testing.assert_array_equal(np.asarray(stacked), expected)
 
 
+@pytest.mark.parametrize("dtype", [jnp.bool_, jnp.uint8, jnp.float32])
+def test_stack_frames_keeps_the_frame_dtype(dtype):
+    """Frames from an earlier episode become zeros of the frame's own dtype, so
+    a bool observation stays bool rather than becoming an int."""
+    frames = jnp.ones((3, 2, 2, 1), dtype)
+    first = jnp.asarray([False, True, False])
+    assert stack_frames(frames, first).dtype == dtype
+
+
 def test_termination_cuts_the_window_and_zeroes_the_discount():
     batch = _window(
         [1.0, 2.0, 3.0, 0.0],
