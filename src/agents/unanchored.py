@@ -29,6 +29,7 @@ class UnanchoredConfig(DDQNConfig):
     REWARD_CLIP: bool = True
     LONG_TERM_SIZE: int = 90_000
     LONG_TERM_BATCH_SIZE: int = 4
+    LONG_TERM_N_STEP: int = 1
     SUBSAMPLE: int = 10
 
 
@@ -44,7 +45,7 @@ class UnanchoredAgent(DDQNAgent):
                     n_step=config.N_STEP,
                     gamma=config.GAMMA,
                 ),
-                NStepSelector(n_step=1, gamma=config.GAMMA),
+                NStepSelector(n_step=config.LONG_TERM_N_STEP, gamma=config.GAMMA),
                 Subsample(every=config.SUBSAMPLE),
                 TransitionBuffer(
                     capacity=config.LONG_TERM_SIZE,
