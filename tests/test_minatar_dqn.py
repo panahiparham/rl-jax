@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
 from agents import AGENTS
+from agents.ddqn import DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig, MinAtarDQNConfig
+from agents.endpoint import EndpointConfig
+from agents.unanchored import UnanchoredConfig
 from environments.minatar import MinAtarConfig
 from main import ExperimentConfig, process_shard
 
@@ -65,4 +70,35 @@ class TestSmokeRun:
         runs = process_shard([config] * 2, [0, 1])
 
         assert [run["reward"].shape for run in runs] == [(60,)] * 2
+        assert all(np.isfinite(run["reward"]).all() for run in runs)
+
+
+class TestReplayAgents:
+    @pytest.mark.parametrize("agent", ["ddqn", "endpoint", "unanchored"])
+    def test_replay_agents_train_on_minatar(self, agent):
+        """DDQN, endpoint and unanchored replay train on MinAtar's bool
+        observations, vmapped over seeds, with the experiment's layout scaled
+        down: a recency buffer plus a long-term memory."""
+        learner = dataclasses.asdict(
+            MinAtarDQNConfig(
+                TOTAL_TIMESTEPS=120,
+                LEARNING_STARTS=40,
+                TARGET_NETWORK_FREQUENCY=16,
+            )
+        )
+        memory = {"BUFFER_SIZE": 32, "LONG_TERM_SIZE": 32}
+        hypers = {
+            "ddqn": DDQNConfig(**{**learner, "BUFFER_SIZE": 64}),
+            "endpoint": EndpointConfig(**{**learner, **memory}),
+            "unanchored": UnanchoredConfig(**{**learner, **memory}),
+        }[agent]
+        config = ExperimentConfig(
+            AGENT=agent,
+            ENV="minatar",
+            AGENT_HYPERS=hypers,
+            ENV_HYPERS=MinAtarConfig(GAME="freeway"),
+        )
+        runs = process_shard([config] * 2, [0, 1])
+
+        assert [run["reward"].shape for run in runs] == [(120,)] * 2
         assert all(np.isfinite(run["reward"]).all() for run in runs)
