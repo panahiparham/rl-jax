@@ -10,6 +10,7 @@ from experiment.hypers import traced
 
 from components import (
     BufferState,
+    MinAtarCNN,
     NatureCNN,
     NatureCNNLN,
     QNetwork,
@@ -44,10 +45,31 @@ class DQNConfig:
     EPSILON_END: float = traced(0.05)
     EPSILON_DECAY_STEPS: int = traced(100_000)
     HIDDEN_SIZE: int = 64
-    # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
+    # "mlp"/"mlp_ln" (vector obs), "nature_cnn"/"nature_cnn_ln" (image obs) or
+    # "minatar_cnn" (MinAtar's 10x10 grid)
     NETWORK_PRESET: str = "mlp"
     ADAM_EPS: float = traced(1e-8)
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
+
+
+@dataclass(frozen=True, kw_only=True)
+class MinAtarDQNConfig(DQNConfig):
+    """DQN hyperparameters of reg-duel-q's MinAtar baseline."""
+
+    LR: float = traced(0.00025)
+    ADAM_EPS: float = traced(3.125e-4)
+    BUFFER_SIZE: int = 100_000
+    BATCH_SIZE: int = 32
+    TOTAL_TIMESTEPS: int = 10_000_000
+    LEARNING_STARTS: int = traced(1_000)
+    TRAIN_FREQUENCY: int = traced(4)
+    TARGET_NETWORK_FREQUENCY: int = traced(1_000)
+    GAMMA: float = traced(0.99)
+    EPSILON_START: float = traced(1.0)
+    EPSILON_END: float = traced(0.01)
+    EPSILON_DECAY_STEPS: int = traced(250_000)
+    NETWORK_PRESET: str = "minatar_cnn"
+    REWARD_CLIP: bool = False
 
 
 class DQNState(NamedTuple):
@@ -71,6 +93,8 @@ class DQNAgent:
         self._optimizer = optax.adam(config.LR, eps=config.ADAM_EPS)
 
     def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
+        if self._config.NETWORK_PRESET == "minatar_cnn":
+            return MinAtarCNN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "nature_cnn":
             return NatureCNN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "nature_cnn_ln":

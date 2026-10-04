@@ -89,6 +89,7 @@ module = [
     "environments.autoreset",
     "environments.catch",
     "environments.classic_control",
+    "environments.minatar",
     "environments.pinball",
     "main",
 ]
