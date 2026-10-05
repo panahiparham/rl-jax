@@ -16,7 +16,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from components import MinAtarCNN, NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
+from components import (
+    MinAtarCNN,
+    MinAtarCNNLN,
+    NatureCNN,
+    NatureCNNLN,
+    QNetwork,
+    QNetworkLN,
+)
 
 
 def test_qnetwork_ln_output_shape_and_finite():
@@ -54,6 +61,20 @@ def test_minatar_cnn_output_shape_and_finite():
     out = net(obs)
     assert out.shape == (3,)
     assert np.isfinite(np.asarray(out)).all()
+
+
+def test_minatar_cnn_ln_output_shape_and_finite():
+    obs = jnp.zeros((10, 10, 4), jnp.bool_)
+    net = MinAtarCNNLN(obs_shape=obs.shape, action_dim=3, key=jax.random.key(0))
+    out = net(obs)
+    assert out.shape == (3,)
+    assert np.isfinite(np.asarray(out)).all()
+
+
+def test_minatar_cnn_ln_head_has_no_affine_params():
+    net = MinAtarCNNLN(obs_shape=(10, 10, 4), action_dim=3, key=jax.random.key(0))
+    assert net.head_ln.weight is None
+    assert net.head_ln.bias is None
 
 
 def test_minatar_cnn_parameter_count():
