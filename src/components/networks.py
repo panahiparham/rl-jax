@@ -75,23 +75,29 @@ class QNetworkLN(eqx.Module):
 class QNetworkHistogramLoss(eqx.Module):
     """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
 
+    # Model layers
     layer1: eqx.nn.Linear
     ln1: eqx.nn.LayerNorm
     layer2: eqx.nn.Linear
     ln2: eqx.nn.LayerNorm
     layer3: eqx.nn.Linear
-    num_bins: int
-    histogram_support_min: float # a
-    histogram_support_max: float # b
-    histogram_sigma: float
-    histogram_bin_width: float
 
-    def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array, num_bins: int, histogram_support_min: float, histogram_support_max: float, histogram_sigma: float, ):
+    # Histogram params
+    action_dim: int = eqx.field(static=True)
+    num_bins: int = eqx.field(static=True)
+    histogram_support_min: float = eqx.field(static=True) # a
+    histogram_support_max: float = eqx.field(static=True) # b
+    histogram_sigma: float = eqx.field(static=True)
+    histogram_bin_width: float = eqx.field(static=True)
+
+
+    def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array, num_bins: int, histogram_support_min: float, histogram_support_max: float, sigma_ratio: float):
+        self.action_dim = action_dim
         self.num_bins = num_bins
         self.histogram_support_min = histogram_support_min
         self.histogram_support_max = histogram_support_max
-        self.histogram_sigma = histogram_sigma
         self.histogram_bin_width = (histogram_support_max - histogram_support_min) / num_bins
+        self.histogram_sigma = sigma_ratio * self.histogram_bin_width
 
         k1, k2, k3 = jax.random.split(key, 3)
         self.layer1 = _linear(obs_dim, hidden_size, key=k1)
@@ -104,8 +110,14 @@ class QNetworkHistogramLoss(eqx.Module):
         x = jnp.ravel(x)
         x = jax.nn.relu(self.ln1(self.layer1(x)))
         x = jax.nn.relu(self.ln2(self.layer2(x)))
-        x = self.layer3(x)
-        return jax.nn.softmax(x)
+
+        # Returns the raw logits
+        logits = self.layer3(x)
+        logits = jnp.reshape(logits, (self.action_dim, self.num_bins))
+        return logits
+
+    def histogram_bins(self):
+        return jnp.linspace(self.histogram_support_min, self.histogram_support_max, self.num_bins + 1)
 
     def get_histogram_values(self, target: jax.Array) -> jax.Array:
         """
@@ -120,7 +132,7 @@ class QNetworkHistogramLoss(eqx.Module):
         z = 0.5 * (left - right)
 
         # Compute l (left side of bin)
-        bins = jnp.linspace(self.histogram_support_min, self.histogram_support_max, self.num_bins, endpoint=False)
+        bins = self.histogram_bins()[:-1]
 
         # Compute probability for each bin
         c_left = jss.erf((bins + self.histogram_bin_width - target) / (jnp.sqrt(2) * self.histogram_sigma))
@@ -129,6 +141,11 @@ class QNetworkHistogramLoss(eqx.Module):
 
         return c
 
+    def get_action_values(self, logits: jax.Array) -> jax.Array:
+        bins = self.histogram_bins()
+        bin_centres = (bins[:-1] + bins[1:]) / 2
+        probabilities = jax.nn.softmax(logits, axis=-1)
+        return probabilities @ bin_centres
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):

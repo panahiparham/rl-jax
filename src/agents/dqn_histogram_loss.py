@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import optax
 from experiment.hypers import traced
+from agents.dqn import DQNConfig
 
 from components import (
     BufferState,
@@ -22,8 +23,8 @@ from components import (
 
 
 @dataclass(frozen=True, kw_only=True)
-class DQNConfig:
-    """DQN's hyperparameters.
+class DQNHistogramConfig(DQNConfig):
+    """DQN hyperparameters with histogramloss.
 
     The traced ones are read as numbers while a run steps, so runs differing
     only in those can be computed together. The rest fix shapes and objects -
@@ -31,31 +32,15 @@ class DQNConfig:
     in any of them are computed separately.
     """
 
-    LR: float = traced(3e-4)
-    BUFFER: str = "uniform"
-    BUFFER_SIZE: int = 100_000
-    BATCH_SIZE: int = 64
-    N_STEP: int = 1
-    TOTAL_TIMESTEPS: int = 200_000
-    LEARNING_STARTS: int = traced(1_000)
-    TRAIN_FREQUENCY: int = traced(1)
-    TARGET_NETWORK_FREQUENCY: int = traced(1_000)
-    GAMMA: float = traced(0.99)
-    EPSILON_START: float = traced(1.0)
-    EPSILON_END: float = traced(0.05)
-    EPSILON_DECAY_STEPS: int = traced(100_000)
-    HIDDEN_SIZE: int = 64
-    # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
-    NETWORK_PRESET: str = "mlp"
-    ADAM_EPS: float = traced(1e-8)
-    # clip to sign(reward) for the buffer and update only
-    REWARD_CLIP: bool = False
-    # Number of bins for histogram loss
+    # Different network architecture needed for histogram loss
+    NETWORK_PRESET: str = "mlp_histogram"
+
+    # Histogram params
     NUM_BINS: int = 100
     # Support
-    SUPPORT_LOWER_BOUND: int = -10
-    SUPPORT_UPPER_BOUND: int = 10
-    SIGMA: float = 3.0
+    SUPPORT_LOWER_BOUND: float = -100
+    SUPPORT_UPPER_BOUND: float = 100
+    SIGMA_RATIO: float = 2.0
 
 
 class DQNState(NamedTuple):
@@ -66,8 +51,8 @@ class DQNState(NamedTuple):
     t: jax.Array
 
 
-class DQNAgent:
-    def __init__(self, config: DQNConfig):
+class DQNHistogramAgent:
+    def __init__(self, config: DQNHistogramConfig):
         self._config = config
         self._buffer = build_buffer(
             config.BUFFER,
@@ -79,9 +64,10 @@ class DQNAgent:
         self._optimizer = optax.adam(config.LR, eps=config.ADAM_EPS)
 
     def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
-        if self._config.NETWORK_PRESET == "mlp_histogram":
-            return QNetworkHistogramLoss(obs_shape, action_dim, key)
-        raise ValueError(f"unknown NETWORK_PRESET {self._config.NETWORK_PRESET!r}")
+        config = self._config
+        if config.NETWORK_PRESET == "mlp_histogram":
+            return QNetworkHistogramLoss(math.prod(obs_shape), action_dim, config.HIDDEN_SIZE, key, config.NUM_BINS, config.SUPPORT_LOWER_BOUND, config.SUPPORT_UPPER_BOUND, config.SIGMA_RATIO)
+        raise ValueError(f"unknown NETWORK_PRESET {config.NETWORK_PRESET!r}")
 
     def init(self, key: jax.Array, observation_space, action_space):
         obs_shape = observation_space.shape
@@ -96,7 +82,9 @@ class DQNAgent:
 
     def act(self, state: DQNState, key: jax.Array, obs: jax.Array):
         config = self._config
-        q_values = state.q(obs)
+        logits = state.q(obs)
+        q_values = state.q.get_action_values(logits)
+
         epsilon = linear_epsilon(
             state.t,
             config.EPSILON_START,
@@ -110,13 +98,29 @@ class DQNAgent:
         """One gradient step on the masked n-step TD loss."""
         batch = self._buffer.sample(state.buffer_state, key)
 
-        def loss_fn(q: QNetwork) -> jax.Array:
-            q_sa = jax.vmap(q)(batch.obs)
-            q_a = jnp.take_along_axis(q_sa, batch.action[:, None], axis=-1).squeeze(-1)
-            boot = jnp.max(jax.vmap(state.target_q)(batch.boot_obs), axis=-1)
-            target = jax.lax.stop_gradient(batch.ret + batch.discount * boot)
-            sq_err = jnp.where(batch.mask, jnp.square(q_a - target), 0.0)
-            return jnp.sum(sq_err) / jnp.maximum(jnp.sum(batch.mask), 1)
+        def loss_fn(q: QNetworkHistogramLoss) -> jax.Array:
+            # Get logits from network
+            logits = jax.vmap(q)(batch.obs) # batch by num_actions by num_bins
+            logits_a = logits[jnp.arange(logits.shape[0]), batch.action]
+
+            # Compute histogram targets
+            target_logits = jax.vmap(state.target_q)(batch.boot_obs)
+            q_values = jax.vmap(state.target_q.get_action_values)(target_logits)
+            max_q = jnp.max(q_values, axis=-1)
+            target = jax.lax.stop_gradient(batch.ret + batch.discount * max_q)
+
+            # If the target value is super far outside the range of the histogram it could cause numerical issues
+            target = jnp.clip(
+                target,
+                state.target_q.histogram_support_min,
+                state.target_q.histogram_support_max,
+            )
+
+            histogram_targets = jax.vmap(state.target_q.get_histogram_values)(target)
+
+            cross_entropy = optax.losses.softmax_cross_entropy(logits_a, histogram_targets)
+            cross_entropy = jnp.where(batch.mask, cross_entropy, 0.0)
+            return jnp.sum(cross_entropy) / jnp.maximum(jnp.sum(batch.mask), 1)
 
         grads = eqx.filter_grad(loss_fn)(state.q)
         updates, opt_state = self._optimizer.update(
