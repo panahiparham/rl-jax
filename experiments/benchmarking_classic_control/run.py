@@ -1,4 +1,5 @@
-"""Run: Agent0 on MountainCar, Acrobot and Cartpole, with tuned DQN's hypers.
+"""Run: Agent0 and Agent1 on MountainCar, Acrobot and Cartpole, with tuned DQN's
+hypers.
 
 Cheat sheet:
     Status: uv run experiments/benchmarking_classic_control/run.py status

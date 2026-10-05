@@ -1,4 +1,4 @@
-"""Run: Agent0 on Pinball (empty, box, easy), with tuned DQN's hypers.
+"""Run: Agent0 and Agent1 on Pinball (empty, box, easy), with tuned DQN's hypers.
 
 Cheat sheet:
     Status: uv run experiments/benchmarking_pinball/run.py status

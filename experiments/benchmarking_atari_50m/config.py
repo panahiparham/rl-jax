@@ -3,6 +3,7 @@ from pathlib import Path
 from experiment.design import Component, Experiment, SlurmResources
 
 from agents.agent0 import Agent0Config
+from agents.agent1 import Agent1Config
 from environments.atari import AtariConfig
 from main import ExperimentConfig
 
@@ -21,7 +22,7 @@ _GAMES = [
     "qbert",
 ]
 
-# Start from the DQN hypers; Agent0 adapts them below.
+# Start from the DQN hypers; Agent0 and Agent1 adapt them below.
 _DQN_HYPERS = {
     "TOTAL_TIMESTEPS": 12_500_000,      # 50M frames at FRAMESKIP=4
     "LR": 6.25e-05,
@@ -38,29 +39,33 @@ _DQN_HYPERS = {
     "NETWORK_PRESET": "nature_cnn",
 }
 
-# Agent0 has no target network and uses the LN variant of the Nature CNN.
-_AGENT0_HYPERS = {
+# Agent0 and Agent1 have no target network and use the LN variant of the
+# Nature CNN.
+_AGENT_HYPERS = {
     **{k: v for k, v in _DQN_HYPERS.items() if k != "TARGET_NETWORK_FREQUENCY"},
     "NETWORK_PRESET": "nature_cnn_ln",
 }
+
+_AGENTS = {"agent0": Agent0Config, "agent1": Agent1Config}
 
 EXPERIMENT = Experiment(
     name="benchmarking_atari_50m",
     results_dir=Path(__file__).resolve().parent / "results",
     components=[
         Component(
-            name="agent0_atari",
+            name=f"{agent}_atari",
             config=ExperimentConfig(
-                AGENT="agent0",
+                AGENT=agent,
                 ENV="atari",
-                AGENT_HYPERS=Agent0Config(**_AGENT0_HYPERS, REWARD_CLIP=True),
+                AGENT_HYPERS=config_cls(**_AGENT_HYPERS, REWARD_CLIP=True),
                 ENV_HYPERS=AtariConfig(),
             ),
             sweep={"ENV_HYPERS.GAME": _GAMES},
             seeds=list(range(10)),
             shard_size=1,
             parallel_shards=5,
-        ),
+        )
+        for agent, config_cls in _AGENTS.items()
     ],
     # Five packed runs (parallel_shards=5) share one GPU through CUDA MPS,
     # with a CPU each.

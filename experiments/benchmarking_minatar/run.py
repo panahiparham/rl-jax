@@ -1,6 +1,6 @@
 """
-Run: Agent0 on MinAtar (Asterix, Breakout, Freeway, Space Invaders), on
-deterministic GPU kernels.
+Run: Agent0 and Agent1 on MinAtar (Asterix, Breakout, Freeway, Space Invaders),
+on deterministic GPU kernels.
 
 Cheat sheet:
     Status: uv run experiments/benchmarking_minatar/run.py status
