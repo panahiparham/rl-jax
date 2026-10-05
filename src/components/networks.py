@@ -3,6 +3,7 @@ import math
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import jax.scipy.special as jss
 
 
 def _fan_in_uniform[Layer: (eqx.nn.Linear, eqx.nn.Conv2d)](
@@ -69,6 +70,65 @@ class QNetworkLN(eqx.Module):
         x = jax.nn.relu(self.ln1(self.layer1(x)))
         x = jax.nn.relu(self.ln2(self.layer2(x)))
         return self.layer3(x)
+
+
+class QNetworkHistogramLoss(eqx.Module):
+    """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
+
+    layer1: eqx.nn.Linear
+    ln1: eqx.nn.LayerNorm
+    layer2: eqx.nn.Linear
+    ln2: eqx.nn.LayerNorm
+    layer3: eqx.nn.Linear
+    num_bins: int
+    histogram_support_min: float # a
+    histogram_support_max: float # b
+    histogram_sigma: float
+    histogram_bin_width: float
+
+    def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array, num_bins: int, histogram_support_min: float, histogram_support_max: float, histogram_sigma: float, ):
+        self.num_bins = num_bins
+        self.histogram_support_min = histogram_support_min
+        self.histogram_support_max = histogram_support_max
+        self.histogram_sigma = histogram_sigma
+        self.histogram_bin_width = (histogram_support_max - histogram_support_min) / num_bins
+
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.layer1 = _linear(obs_dim, hidden_size, key=k1)
+        self.ln1 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
+        self.layer2 = _linear(hidden_size, hidden_size, key=k2)
+        self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
+        self.layer3 = _linear(hidden_size, action_dim * self.num_bins, key=k3)
+
+    def __call__(self, x: jax.Array):
+        x = jnp.ravel(x)
+        x = jax.nn.relu(self.ln1(self.layer1(x)))
+        x = jax.nn.relu(self.ln2(self.layer2(x)))
+        x = self.layer3(x)
+        return jax.nn.softmax(x)
+
+    def get_histogram_values(self, target: jax.Array) -> jax.Array:
+        """
+        Computes HL gauss histograms for a single target
+        """
+
+        # Code based on HL Gauss equations from page 5 of https://www.jmlr.org/papers/v27/24-0260.html
+
+        # Compute Z
+        left = jss.erf((self.histogram_support_max - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        right = jss.erf((self.histogram_support_min - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        z = 0.5 * (left - right)
+
+        # Compute l (left side of bin)
+        bins = jnp.linspace(self.histogram_support_min, self.histogram_support_max, self.num_bins, endpoint=False)
+
+        # Compute probability for each bin
+        c_left = jss.erf((bins + self.histogram_bin_width - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        c_right = jss.erf((bins - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        c = (1 / (2 * z)) * (c_left - c_right)
+
+        return c
+
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):

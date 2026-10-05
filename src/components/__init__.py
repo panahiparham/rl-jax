@@ -7,7 +7,7 @@ from components.buffers.uniform import (
     build_buffer,
     n_step_return,
 )
-from components.networks import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
+from components.networks import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN, QNetworkHistogramLoss
 from components.policy import epsilon_greedy_action, linear_epsilon
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "NatureCNNLN",
     "QNetwork",
     "QNetworkLN",
+    "QNetworkHistogramLoss",
     "ReplayBuffer",
     "TimeStep",
     "build_buffer",
