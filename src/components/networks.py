@@ -217,3 +217,55 @@ class NatureCNNLN(eqx.Module):
         x = jax.nn.relu(self.conv3(x))
         x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
         return self.out(x)
+
+
+def _minatar_flat_dim(obs_shape: tuple[int, ...]):
+    """Flattened size after the 3x3 valid conv with 16 filters."""
+    return (obs_shape[0] - 2) * (obs_shape[1] - 2) * 16
+
+
+class MinAtarCNN(eqx.Module):
+    """MinAtar DQN torso: one 3x3 conv with 16 filters, then a 128 unit head."""
+
+    conv: eqx.nn.Conv2d
+    head: eqx.nn.Linear
+    out: eqx.nn.Linear
+
+    def __init__(self, obs_shape: tuple[int, ...], action_dim: int, key: jax.Array):
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.conv = _conv(obs_shape[-1], 16, kernel_size=3, stride=1, key=k1)
+        self.head = _linear(_minatar_flat_dim(obs_shape), 128, key=k2)
+        self.out = _linear(128, action_dim, key=k3)
+
+    def __call__(self, x: jax.Array):
+        # (H,W,C) bool -> (C,H,W) float
+        x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
+        x = jax.nn.relu(self.conv(x))
+        x = jax.nn.relu(self.head(jnp.ravel(x)))
+        return self.out(x)
+
+
+class MinAtarCNNLN(eqx.Module):
+    """MinAtarCNN with a no-affine LayerNorm after the dense head, before its relu.
+
+    The conv layer is left unnormalized, following NatureCNNLN's convention.
+    """
+
+    conv: eqx.nn.Conv2d
+    head: eqx.nn.Linear
+    head_ln: eqx.nn.LayerNorm
+    out: eqx.nn.Linear
+
+    def __init__(self, obs_shape: tuple[int, ...], action_dim: int, key: jax.Array):
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.conv = _conv(obs_shape[-1], 16, kernel_size=3, stride=1, key=k1)
+        self.head = _linear(_minatar_flat_dim(obs_shape), 128, key=k2)
+        self.head_ln = eqx.nn.LayerNorm(128, use_weight=False, use_bias=False)
+        self.out = _linear(128, action_dim, key=k3)
+
+    def __call__(self, x: jax.Array):
+        # (H,W,C) bool -> (C,H,W) float
+        x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
+        x = jax.nn.relu(self.conv(x))
+        x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
+        return self.out(x)

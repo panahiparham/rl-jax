@@ -16,7 +16,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from components import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
+from components import (
+    MinAtarCNN,
+    MinAtarCNNLN,
+    NatureCNN,
+    NatureCNNLN,
+    QNetwork,
+    QNetworkLN,
+)
 
 
 def test_qnetwork_ln_output_shape_and_finite():
@@ -48,6 +55,53 @@ def test_nature_cnn_ln_head_has_no_affine_params():
     assert net.head_ln.bias is None
 
 
+def test_minatar_cnn_output_shape_and_finite():
+    obs = jnp.zeros((10, 10, 4), jnp.bool_)
+    net = MinAtarCNN(obs_shape=obs.shape, action_dim=3, key=jax.random.key(0))
+    out = net(obs)
+    assert out.shape == (3,)
+    assert np.isfinite(np.asarray(out)).all()
+
+
+def test_minatar_cnn_ln_output_shape_and_finite():
+    obs = jnp.zeros((10, 10, 4), jnp.bool_)
+    net = MinAtarCNNLN(obs_shape=obs.shape, action_dim=3, key=jax.random.key(0))
+    out = net(obs)
+    assert out.shape == (3,)
+    assert np.isfinite(np.asarray(out)).all()
+
+
+def test_minatar_cnn_ln_head_has_no_affine_params():
+    net = MinAtarCNNLN(obs_shape=(10, 10, 4), action_dim=3, key=jax.random.key(0))
+    assert net.head_ln.weight is None
+    assert net.head_ln.bias is None
+
+
+def test_minatar_cnn_parameter_count():
+    """Breakout's 4 channels and 3 actions give 592 conv, 131,200 hidden and
+    387 output parameters."""
+    net = MinAtarCNN(obs_shape=(10, 10, 4), action_dim=3, key=jax.random.key(0))
+    leaves = jax.tree.leaves(eqx.filter(net, eqx.is_array))
+    assert sum(leaf.size for leaf in leaves) == 592 + 131_200 + 387
+
+
+def test_minatar_cnn_reads_bool_observations_as_zeros_and_ones():
+    """A bool observation gives the same values as its float encoding."""
+    net = MinAtarCNN(obs_shape=(10, 10, 4), action_dim=3, key=jax.random.key(0))
+    obs = jax.random.bernoulli(jax.random.key(1), 0.3, (10, 10, 4))
+    assert jnp.allclose(net(obs), net(obs.astype(jnp.float32)))
+
+
+@pytest.mark.parametrize("channel", range(4))
+def test_minatar_cnn_uses_every_channel_of_the_last_axis(channel: int):
+    """A single active cell changes the output whichever channel it is in, so
+    the (H, W, C) layout is read as channels last."""
+    net = MinAtarCNN(obs_shape=(10, 10, 4), action_dim=3, key=jax.random.key(0))
+    empty = jnp.zeros((10, 10, 4), jnp.bool_)
+    one_cell = empty.at[3, 5, channel].set(True)
+    assert not jnp.allclose(net(empty), net(one_cell))
+
+
 # --- initialization -----------------------------------------------------------
 
 _KEY = jax.random.key(0)
@@ -56,6 +110,7 @@ _NETWORKS = {
     "mlp_ln": QNetworkLN(obs_dim=6, action_dim=4, hidden_size=64, key=_KEY),
     "nature_cnn": NatureCNN(obs_shape=(84, 84, 4), action_dim=6, key=_KEY),
     "nature_cnn_ln": NatureCNNLN(obs_shape=(84, 84, 4), action_dim=6, key=_KEY),
+    "minatar_cnn": MinAtarCNN(obs_shape=(10, 10, 4), action_dim=3, key=_KEY),
 }
 
 

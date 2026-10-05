@@ -10,6 +10,7 @@ from experiment.hypers import traced
 
 from components import (
     BufferState,
+    MinAtarCNNLN,
     NatureCNN,
     NatureCNNLN,
     QNetwork,
@@ -44,7 +45,8 @@ class Agent0Config:
     EPSILON_END: float = traced(0.05)
     EPSILON_DECAY_STEPS: int = traced(100_000)
     HIDDEN_SIZE: int = 64
-    # "mlp"/"mlp_ln" (vector obs) or "nature_cnn"/"nature_cnn_ln" (image obs)
+    # "mlp"/"mlp_ln" (vector obs), "nature_cnn"/"nature_cnn_ln" (image obs) or
+    # "minatar_cnn_ln" (MinAtar's 10x10 grid)
     NETWORK_PRESET: str = "mlp_ln"
     ADAM_EPS: float = traced(1e-8)
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
@@ -74,6 +76,8 @@ class Agent0Agent:
             return NatureCNN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "nature_cnn_ln":
             return NatureCNNLN(obs_shape, action_dim, key)
+        if self._config.NETWORK_PRESET == "minatar_cnn_ln":
+            return MinAtarCNNLN(obs_shape, action_dim, key)
         if self._config.NETWORK_PRESET == "mlp":
             return QNetwork(
                 math.prod(obs_shape), action_dim, self._config.HIDDEN_SIZE, key
@@ -104,7 +108,7 @@ class Agent0Agent:
             config.LEARNING_STARTS,
             config.EPSILON_DECAY_STEPS,
         )
-        return epsilon_greedy_action(q_values, epsilon, q_values.shape[-1], key)
+        return epsilon_greedy_action(q_values, epsilon, key)
 
     def _train_step(self, state: Agent0State, key: jax.Array):
         """One gradient step on the masked n-step TD loss, bootstrapping off

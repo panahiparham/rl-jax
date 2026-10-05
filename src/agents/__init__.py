@@ -1,6 +1,7 @@
 from typing import Any, NamedTuple
 
 from agents.agent0 import Agent0Agent, Agent0Config
+from agents.agent1 import Agent1Agent, Agent1Config
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
 from agents.dqn_noheadbias import DQNNoHeadBiasAgent, DQNNoHeadBiasConfig
@@ -8,6 +9,8 @@ from agents.endpoint import EndpointAgent, EndpointConfig
 from agents.random import RandomAgent, RandomConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
 from agents.dqn_histogram_loss import DQNHistogramAgent, DQNHistogramConfig
+from agents.reservoir import ReservoirAgent, ReservoirConfig
+from agents.unanchored import UnanchoredAgent, UnanchoredConfig
 
 
 class AgentSpec(NamedTuple):
@@ -26,8 +29,11 @@ AGENTS: dict[str, AgentSpec] = {
     "ddqn": AgentSpec(DDQNConfig, DDQNAgent),
     "dqn_noheadbias": AgentSpec(DQNNoHeadBiasConfig, DQNNoHeadBiasAgent),
     "agent0": AgentSpec(Agent0Config, Agent0Agent),
+    "agent1": AgentSpec(Agent1Config, Agent1Agent),
     "endpoint": AgentSpec(EndpointConfig, EndpointAgent),
     "dqn_histogram": AgentSpec(DQNHistogramConfig, DQNHistogramAgent)
+    "unanchored": AgentSpec(UnanchoredConfig, UnanchoredAgent),
+    "reservoir": AgentSpec(ReservoirConfig, ReservoirAgent),
 }
 
 
@@ -40,6 +46,7 @@ def get_config(name: str):
 __all__ = [
     "AGENTS",
     "Agent0Config",
+    "Agent1Config",
     "AgentSpec",
     "DDQNConfig",
     "DQNConfig",
@@ -48,5 +55,7 @@ __all__ = [
     "RandomBufferConfig",
     "RandomConfig",
     "DQNHistogramConfig"
+    "ReservoirConfig",
+    "UnanchoredConfig",
     "get_config",
 ]

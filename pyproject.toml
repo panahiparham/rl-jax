@@ -77,6 +77,7 @@ files = ["src"]
 module = [
     "agents",
     "agents.agent0",
+    "agents.agent1",
     "agents.ddqn",
     "agents.dqn",
     "agents.endpoint",
@@ -89,6 +90,7 @@ module = [
     "environments.autoreset",
     "environments.catch",
     "environments.classic_control",
+    "environments.minatar",
     "environments.pinball",
     "main",
 ]
@@ -97,7 +99,13 @@ disallow_incomplete_defs = false
 disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
-module = ["agents.agent0", "agents.ddqn", "agents.dqn", "agents.endpoint"]
+module = [
+    "agents.agent0",
+    "agents.agent1",
+    "agents.ddqn",
+    "agents.dqn",
+    "agents.endpoint",
+]
 disable_error_code = ["arg-type", "operator", "type-var"]
 
 [[tool.mypy.overrides]]

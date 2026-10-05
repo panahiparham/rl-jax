@@ -11,6 +11,7 @@ from agents import AGENTS
 from agents.agent0 import Agent0Agent, Agent0Config, Agent0State
 from environments import ENVIRONMENTS
 from environments.catch import CatchConfig
+from environments.minatar import MinAtarConfig
 from main import interaction
 
 
@@ -43,3 +44,22 @@ def test_agent0_runs_under_jit_and_trains():
     metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
     assert metrics["reward"].shape == (20,)
     assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+
+
+def test_agent0_minatar_cnn_ln_preset_runs_under_jit_on_minatar():
+    env = ENVIRONMENTS["minatar"].build(MinAtarConfig(GAME="breakout"))
+    agent = Agent0Agent(
+        Agent0Config(
+            TOTAL_TIMESTEPS=20,
+            BUFFER_SIZE=32,
+            BATCH_SIZE=4,
+            LEARNING_STARTS=4,
+            NETWORK_PRESET="minatar_cnn_ln",
+        )
+    )
+    run = jax.jit(lambda key: interaction(key, agent, env, 20))
+    metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
+    out_weight = np.asarray(final_carry[1].q.out.weight)
+    assert metrics["reward"].shape == (20,)
+    assert out_weight.shape == (3, 128)
+    assert np.isfinite(out_weight).all()
