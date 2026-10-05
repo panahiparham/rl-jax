@@ -15,7 +15,11 @@ from components.networks import (
     QNetwork,
     QNetworkLN,
 )
-from components.policy import epsilon_greedy_action, linear_epsilon
+from components.policy import (
+    epsilon_greedy_action,
+    epsilon_greedy_probs,
+    linear_epsilon,
+)
 
 __all__ = [
     "Batch",
@@ -30,6 +34,7 @@ __all__ = [
     "TimeStep",
     "build_buffer",
     "epsilon_greedy_action",
+    "epsilon_greedy_probs",
     "linear_epsilon",
     "n_step_return",
 ]
