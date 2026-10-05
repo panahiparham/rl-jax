@@ -17,14 +17,16 @@ from components import (
     QNetworkLN,
     build_buffer,
     epsilon_greedy_action,
+    epsilon_greedy_probs,
     linear_epsilon,
 )
 
 
 @dataclass(frozen=True, kw_only=True)
 class Agent1Config:
-    """Agent1's hyperparameters: DQN without a target network - it bootstraps
-    directly off the online q-network instead of a periodically-synced copy.
+    """Agent1's hyperparameters: Agent0 with an Expected Sarsa target - it
+    bootstraps off the online q-network's expectation under the epsilon-greedy
+    policy instead of its max.
 
     The traced ones are read as numbers while a run steps, so runs differing
     only in those can be computed together. The rest fix shapes and objects -
@@ -98,27 +100,34 @@ class Agent1Agent:
             t=jnp.asarray(0, jnp.int32),
         )
 
-    def act(self, state: Agent1State, key: jax.Array, obs: jax.Array):
+    def _epsilon(self, t: jax.Array) -> jax.Array:
         config = self._config
-        q_values = state.q(obs)
-        epsilon = linear_epsilon(
-            state.t,
+        return linear_epsilon(
+            t,
             config.EPSILON_START,
             config.EPSILON_END,
             config.LEARNING_STARTS,
             config.EPSILON_DECAY_STEPS,
         )
-        return epsilon_greedy_action(q_values, epsilon, key)
+
+    def act(self, state: Agent1State, key: jax.Array, obs: jax.Array):
+        q_values = state.q(obs)
+        return epsilon_greedy_action(q_values, self._epsilon(state.t), key)
 
     def _train_step(self, state: Agent1State, key: jax.Array):
-        """One gradient step on the masked n-step TD loss, bootstrapping off
-        the same q-network being updated (no target network)."""
+        """One gradient step on the masked n-step Expected Sarsa loss,
+        bootstrapping off the same q-network being updated (no target network)."""
         batch = self._buffer.sample(state.buffer_state, key)
+        epsilon = self._epsilon(state.t)
 
         def loss_fn(q: eqx.Module) -> jax.Array:
             q_sa = jax.vmap(q)(batch.obs)
             q_a = jnp.take_along_axis(q_sa, batch.action[:, None], axis=-1).squeeze(-1)
-            boot = jnp.max(jax.vmap(q)(batch.boot_obs), axis=-1)
+            q_next = jax.vmap(q)(batch.boot_obs)
+            probs = jax.vmap(epsilon_greedy_probs, in_axes=(0, None))(
+                q_next, epsilon
+            )
+            boot = jnp.sum(probs * q_next, axis=-1)
             target = jax.lax.stop_gradient(batch.ret + batch.discount * boot)
             sq_err = jnp.where(batch.mask, jnp.square(q_a - target), 0.0)
             return jnp.sum(sq_err) / jnp.maximum(jnp.sum(batch.mask), 1)
