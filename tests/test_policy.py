@@ -36,7 +36,7 @@ def _empirical_frequencies(q_values, epsilon, action_dim, seed=0):
     keys = jax.random.split(jax.random.PRNGKey(seed), N_SAMPLES)
     sample = jax.vmap(
         lambda k: epsilon_greedy_action(
-            jnp.asarray(q_values), jnp.asarray(epsilon), action_dim, k
+            jnp.asarray(q_values), jnp.asarray(epsilon), k
         )
     )(keys)
     counts = np.bincount(np.asarray(sample), minlength=action_dim)
@@ -88,11 +88,10 @@ def test_probabilities_sum_to_one(epsilon):
 
 
 def test_is_jittable():
-    fn = jax.jit(epsilon_greedy_action, static_argnums=2)
+    fn = jax.jit(epsilon_greedy_action)
     action = fn(
         jnp.asarray([0.0, 1.0, 0.0]),
         jnp.asarray(0.1),
-        3,
         jax.random.PRNGKey(0),
     )
     assert action.dtype == jnp.int32

@@ -108,7 +108,7 @@ class Agent0Agent:
             config.LEARNING_STARTS,
             config.EPSILON_DECAY_STEPS,
         )
-        return epsilon_greedy_action(q_values, epsilon, q_values.shape[-1], key)
+        return epsilon_greedy_action(q_values, epsilon, key)
 
     def _train_step(self, state: Agent0State, key: jax.Array):
         """One gradient step on the masked n-step TD loss, bootstrapping off
