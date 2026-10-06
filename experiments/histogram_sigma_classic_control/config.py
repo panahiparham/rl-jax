@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from experiment.design import Component, Experiment
+from experiment.design import Component, Experiment, SlurmResources
 
 from agents.dqn_histogram_loss import DQNHistogramConfig
 from environments.classic_control import CartpoleConfig, MountainCarConfig
@@ -42,6 +42,7 @@ def _dqn_histogram_hypers(total_timesteps: int = 100_000) -> DQNHistogramConfig:
 EXPERIMENT = Experiment(
     name="histogram_sigma_classic_control",
     results_dir=Path(__file__).resolve().parent / "results",
+    slurm=SlurmResources(time="02:59:00"),
     components=[
         Component(
             name="dqn_histogram_cartpole",
