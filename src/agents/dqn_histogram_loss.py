@@ -6,15 +6,10 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import optax
-from experiment.hypers import traced
-from agents.dqn import DQNConfig
 
+from agents.dqn import DQNConfig
 from components import (
     BufferState,
-    NatureCNN,
-    NatureCNNLN,
-    QNetwork,
-    QNetworkLN,
     QNetworkHistogramLoss,
     build_buffer,
     epsilon_greedy_action,
@@ -92,7 +87,7 @@ class DQNHistogramAgent:
             config.LEARNING_STARTS,
             config.EPSILON_DECAY_STEPS,
         )
-        return epsilon_greedy_action(q_values, epsilon, q_values.shape[-1], key)
+        return epsilon_greedy_action(q_values, epsilon, key)
 
     def _train_step(self, state: DQNState, key: jax.Array):
         """One gradient step on the masked n-step TD loss."""
