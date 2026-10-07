@@ -30,6 +30,14 @@ def _linear(in_features: int, out_features: int, key: jax.Array) -> eqx.nn.Linea
     return _fan_in_uniform(eqx.nn.Linear(in_features, out_features, key=key), key)
 
 
+class _ReLU(eqx.Module):
+    """ReLU as a leafless layer: eqx.nn.Lambda(jax.nn.relu) would make the
+    function a pytree leaf, which jax.lax.cond rejects."""
+
+    def __call__(self, x: jax.Array):
+        return jax.nn.relu(x)
+
+
 class QNetwork(eqx.Module):
     layer1: eqx.nn.Linear
     layer2: eqx.nn.Linear
@@ -73,7 +81,7 @@ class QNetworkLN(eqx.Module):
 
 
 class QNetworkHL(eqx.Module):
-    """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
+    """QNetwork with histogram loss: outputs per-action logits over the support's bins."""
 
     # Model layers
     layers: list
@@ -100,12 +108,11 @@ class QNetworkHL(eqx.Module):
         k1, k2, k3 = jax.random.split(key, 3)
         self.layers = [
             _linear(obs_dim, hidden_size, key=k1),
-            eqx.nn.Lambda(jax.nn.relu),
+            _ReLU(),
             _linear(hidden_size, hidden_size, key=k2),
-            eqx.nn.Lambda(jax.nn.relu),
+            _ReLU(),
             _linear(hidden_size, action_dim * self.num_bins, key=k3),
         ]
-
 
     def __call__(self, x: jax.Array):
         x = jnp.ravel(x)
@@ -147,6 +154,7 @@ class QNetworkHL(eqx.Module):
         probabilities = jax.nn.softmax(logits, axis=-1)
         return probabilities @ bin_centres
 
+
 class QNetworkHLLN(QNetworkHL):
     """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
 
@@ -155,10 +163,10 @@ class QNetworkHLLN(QNetworkHL):
         self.layers = [
             _linear(obs_dim, hidden_size, key=k1),
             eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False),
-            eqx.nn.Lambda(jax.nn.relu),
+            _ReLU(),
             _linear(hidden_size, hidden_size, key=k2),
             eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False),
-            eqx.nn.Lambda(jax.nn.relu),
+            _ReLU(),
             _linear(hidden_size, action_dim * self.num_bins, key=k3),
         ]
 

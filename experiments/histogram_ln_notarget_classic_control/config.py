@@ -1,12 +1,16 @@
 """
 Define: DQN with the HL-Gauss histogram loss on Classic Control environments
-(Cartpole, MountainCar), sweeping a grid of SIGMA_RATIO (σ as a multiple of the
-bin width), NUM_BINS, support range, and learning rate.
+(Cartpole, MountainCar), comparing two variants over the same grid of
+SIGMA_RATIO (σ as a multiple of the bin width), NUM_BINS, support range, and
+learning rate:
 
-Follows up ``experiments/histogram_sigma_classic_control``, whose SIGMA_RATIO-only
-sweep (LR 0.001, 100 bins, support ±100) was weak with the smallest σ best. Every
-other hyper follows the ``experiments/classic_control`` DQN recipe. LR covers the
-middle of ``experiments/tuning``'s grid. 10 seeds per grid point.
+- ``dqn_hl``: no-LayerNorm network, target network synced every 128 steps.
+- ``dqn_hl_ln_notarget``: no-affine LayerNorm network and no target network.
+  TARGET_NETWORK_FREQUENCY=1 syncs the target after every step, so each update
+  bootstraps off the online network as it was before that update, as Agent0 does.
+
+Follows up ``experiments/histogram_grid_classic_control``, whose grid, other
+hypers and 10 seeds per grid point are kept unchanged.
 """
 
 from __future__ import annotations
@@ -27,18 +31,26 @@ LR_SWEEP = [4.0 ** -i for i in (3, 4, 5, 6, 7)]
 SUPPORT_RANGES = [100, 200]
 _SEEDS = list(range(10))
 
+# Component prefix -> (NETWORK_PRESET, TARGET_NETWORK_FREQUENCY).
+VARIANTS = {
+    "dqn_hl": ("mlp_hl", 128),
+    "dqn_hl_ln_notarget": ("mlp_hl_ln", 1),
+}
 
-def _dqn_histogram_hypers(support: int) -> DQNHistogramConfig:
-    # classic_control's DQN hypers, with the histogram agent's LayerNorm
-    # network in place of NETWORK_PRESET="mlp". LR is swept.
+
+def _dqn_histogram_hypers(
+    support: int, preset: str, target_frequency: int
+) -> DQNHistogramConfig:
+    # classic_control's DQN hypers, with a histogram network in place of
+    # NETWORK_PRESET="mlp". LR is swept.
     return DQNHistogramConfig(
-        NETWORK_PRESET="mlp_hl_ln",
+        NETWORK_PRESET=preset,
         TOTAL_TIMESTEPS=100_000,
         BUFFER_SIZE=10_000,
         BATCH_SIZE=64,
         LEARNING_STARTS=1_000,
         TRAIN_FREQUENCY=1,
-        TARGET_NETWORK_FREQUENCY=128,
+        TARGET_NETWORK_FREQUENCY=target_frequency,
         GAMMA=0.99,
         EPSILON_START=0.1,
         EPSILON_END=0.1,
@@ -48,22 +60,22 @@ def _dqn_histogram_hypers(support: int) -> DQNHistogramConfig:
 
 
 def _components(env: str, env_hypers) -> list[Component]:
-    """One component per support range for ``env``, each sweeping the grid.
+    """One component per variant and support range for ``env``, each sweeping the grid.
 
     Args:
         env: The registry ``ENV`` name, e.g. ``"cartpole"``.
         env_hypers: The environment's own hypers (e.g. ``CartpoleConfig``).
 
     Returns:
-        Components named ``dqn_histogram_<env>_support<range>``.
+        Components named ``<variant>_<env>_support<range>``.
     """
     return [
         Component(
-            name=f"dqn_histogram_{env}_support{support}",
+            name=f"{variant}_{env}_support{support}",
             config=ExperimentConfig(
                 AGENT="dqn_histogram",
                 ENV=env,
-                AGENT_HYPERS=_dqn_histogram_hypers(support),
+                AGENT_HYPERS=_dqn_histogram_hypers(support, preset, target_frequency),
                 ENV_HYPERS=env_hypers,
             ),
             sweep={
@@ -77,12 +89,13 @@ def _components(env: str, env_hypers) -> list[Component]:
             # and leaving this unset would batch all five LRs into one shard.
             shard_size=len(_SEEDS),
         )
+        for variant, (preset, target_frequency) in VARIANTS.items()
         for support in SUPPORT_RANGES
     ]
 
 
 EXPERIMENT = Experiment(
-    name="histogram_grid_classic_control",
+    name="histogram_ln_notarget_classic_control",
     results_dir=Path(__file__).resolve().parent / "results",
     slurm=SlurmResources(time="02:59:00"),
     components=[

@@ -16,7 +16,7 @@ from components.networks import (
     QNetwork,
     QNetworkLN,
     QNetworkHL,
-    QNetworkHLLN
+    QNetworkHLLN,
 )
 from components.policy import (
     epsilon_greedy_action,

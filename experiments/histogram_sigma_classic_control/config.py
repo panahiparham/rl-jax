@@ -23,9 +23,10 @@ _SEEDS = list(range(30))
 
 
 def _dqn_histogram_hypers(total_timesteps: int = 100_000) -> DQNHistogramConfig:
-    # classic_control's DQN hypers, minus NETWORK_PRESET="mlp": the histogram
-    # agent needs its own "mlp_histogram" default.
+    # classic_control's DQN hypers, with the histogram agent's LayerNorm
+    # network in place of NETWORK_PRESET="mlp".
     return DQNHistogramConfig(
+        NETWORK_PRESET="mlp_hl_ln",
         TOTAL_TIMESTEPS=total_timesteps,
         LR=0.001,
         BUFFER_SIZE=10_000,

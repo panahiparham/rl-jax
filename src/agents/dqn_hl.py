@@ -35,6 +35,7 @@ class DQNHistogramConfig(DQNConfig):
     SUPPORT_UPPER_BOUND: float = 100
     SIGMA_RATIO: float = 2.0
 
+
 class DQNHistogramAgent(DQNAgent):
     def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
         config = self._config
@@ -62,7 +63,7 @@ class DQNHistogramAgent(DQNAgent):
         """One gradient step on the masked n-step TD loss."""
         batch = self._buffer.sample(state.buffer_state, key)
 
-        def loss_fn(q: QNetworkLNHistogramLoss) -> jax.Array:
+        def loss_fn(q: QNetworkHL) -> jax.Array:
             # Get logits from network
             logits = jax.vmap(q)(batch.obs) # batch by num_actions by num_bins
             logits_a = logits[jnp.arange(logits.shape[0]), batch.action]

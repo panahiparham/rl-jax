@@ -4,7 +4,7 @@ from agents.agent0 import Agent0Agent, Agent0Config
 from agents.agent1 import Agent1Agent, Agent1Config
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
-from agents.dqn_histogram_loss import DQNHistogramAgent, DQNHistogramConfig
+from agents.dqn_hl import DQNHistogramAgent, DQNHistogramConfig
 from agents.dqn_noheadbias import DQNNoHeadBiasAgent, DQNNoHeadBiasConfig
 from agents.endpoint import EndpointAgent, EndpointConfig
 from agents.random import RandomAgent, RandomConfig
