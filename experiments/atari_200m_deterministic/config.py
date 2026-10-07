@@ -12,6 +12,11 @@ _GAMES = [
     "atlantis",
     "tetris",
     "frogger",
+    "gopher",
+    "assault",
+    "demon_attack",
+    "video_pinball",
+    "star_gunner",
 ]
 
 _DQN_HYPERS = {
