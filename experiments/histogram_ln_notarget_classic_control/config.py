@@ -1,6 +1,6 @@
 """
 Define: DQN with the HL-Gauss histogram loss on Classic Control environments
-(Cartpole, MountainCar), comparing two variants over the same grid of
+(Cartpole, Acrobot, MountainCar), comparing two variants over the same grid of
 SIGMA_RATIO (σ as a multiple of the bin width), NUM_BINS, support range, and
 learning rate:
 
@@ -10,7 +10,8 @@ learning rate:
   bootstraps off the online network as it was before that update, as Agent0 does.
 
 Follows up ``experiments/histogram_grid_classic_control``, whose grid, other
-hypers and 10 seeds per grid point are kept unchanged.
+hypers and 10 seeds per grid point are kept unchanged. Acrobot was added later;
+its hypers in ``experiments/tuned`` match these, apart from the swept LR.
 """
 
 from __future__ import annotations
@@ -20,7 +21,11 @@ from pathlib import Path
 from experiment.design import Component, Experiment, SlurmResources
 
 from agents.dqn_hl import DQNHistogramConfig
-from environments.classic_control import CartpoleConfig, MountainCarConfig
+from environments.classic_control import (
+    AcrobotConfig,
+    CartpoleConfig,
+    MountainCarConfig,
+)
 from main import ExperimentConfig
 
 SIGMA_RATIO_SWEEP = [0.5, 0.75, 1.0, 1.5, 2.0, 2.5]
@@ -101,5 +106,6 @@ EXPERIMENT = Experiment(
     components=[
         *_components("cartpole", CartpoleConfig(EPISODE_CUTOFF=500)),
         *_components("mountaincar", MountainCarConfig(EPISODE_CUTOFF=1_000)),
+        *_components("acrobot", AcrobotConfig(EPISODE_CUTOFF=500)),
     ],
 )

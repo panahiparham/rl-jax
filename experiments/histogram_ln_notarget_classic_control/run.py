@@ -1,6 +1,6 @@
 """
-Run: HL-Gauss DQN grid sweep (SIGMA_RATIO, NUM_BINS, support, LR) on Cartpole and
-MountainCar, without LayerNorm vs. with LayerNorm and no target network.
+Run: HL-Gauss DQN grid sweep (SIGMA_RATIO, NUM_BINS, support, LR) on Cartpole, Acrobot
+and MountainCar, without LayerNorm vs. with LayerNorm and no target network.
 
 Cheat sheet:
     Status: uv run experiments/histogram_ln_notarget_classic_control/run.py status
