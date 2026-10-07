@@ -52,5 +52,7 @@ EXPERIMENT = Experiment(
     # with a CPU each.
     # atari_50m_deterministic's full packed workers took 4h10-4h55, so 200M
     # frames need about 17-20h.
-    slurm=SlurmResources(time="1-11:59:00", gpus=1, mps=True, cpus_per_task=5),
+    slurm=SlurmResources(
+        time="2-23:59:00", gpus=1, mps=True, cpus_per_task=5, account="aip-whitem"
+    ),
 )
