@@ -3,6 +3,7 @@ import math
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import jax.scipy.special as jss
 
 
 def _fan_in_uniform[Layer: (eqx.nn.Linear, eqx.nn.Conv2d)](
@@ -27,6 +28,14 @@ def _conv(
 
 def _linear(in_features: int, out_features: int, key: jax.Array) -> eqx.nn.Linear:
     return _fan_in_uniform(eqx.nn.Linear(in_features, out_features, key=key), key)
+
+
+class _ReLU(eqx.Module):
+    """ReLU as a leafless layer: eqx.nn.Lambda(jax.nn.relu) would make the
+    function a pytree leaf, which jax.lax.cond rejects."""
+
+    def __call__(self, x: jax.Array):
+        return jax.nn.relu(x)
 
 
 class QNetwork(eqx.Module):
@@ -69,6 +78,98 @@ class QNetworkLN(eqx.Module):
         x = jax.nn.relu(self.ln1(self.layer1(x)))
         x = jax.nn.relu(self.ln2(self.layer2(x)))
         return self.layer3(x)
+
+
+class QNetworkHL(eqx.Module):
+    """QNetwork with histogram loss: outputs per-action logits over the support's bins."""
+
+    # Model layers
+    layers: list
+
+    # Histogram params
+    action_dim: int = eqx.field(static=True)
+    num_bins: int = eqx.field(static=True)
+    histogram_support_min: float = eqx.field(static=True) # a
+    histogram_support_max: float = eqx.field(static=True) # b
+    histogram_sigma: float = eqx.field(static=True)
+    histogram_bin_width: float = eqx.field(static=True)
+
+
+    def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array, num_bins: int, histogram_support_min: float, histogram_support_max: float, sigma_ratio: float):
+        self.action_dim = action_dim
+        self.num_bins = num_bins
+        self.histogram_support_min = histogram_support_min
+        self.histogram_support_max = histogram_support_max
+        self.histogram_bin_width = (histogram_support_max - histogram_support_min) / num_bins
+        self.histogram_sigma = sigma_ratio * self.histogram_bin_width
+        self.init_layers(obs_dim, action_dim, hidden_size, key)
+
+    def init_layers(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.layers = [
+            _linear(obs_dim, hidden_size, key=k1),
+            _ReLU(),
+            _linear(hidden_size, hidden_size, key=k2),
+            _ReLU(),
+            _linear(hidden_size, action_dim * self.num_bins, key=k3),
+        ]
+
+    def __call__(self, x: jax.Array):
+        x = jnp.ravel(x)
+        for layer in self.layers:
+            x = layer(x)
+
+        # Raw logits from network
+        logits = jnp.reshape(x, (self.action_dim, self.num_bins))
+        return logits
+
+    def histogram_bins(self):
+        return jnp.linspace(self.histogram_support_min, self.histogram_support_max, self.num_bins + 1)
+
+    def get_histogram_values(self, target: jax.Array) -> jax.Array:
+        """
+        Computes HL gauss histograms for a single target
+        """
+
+        # Code based on HL Gauss equations from page 5 of https://www.jmlr.org/papers/v27/24-0260.html
+
+        # Compute Z
+        left = jss.erf((self.histogram_support_max - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        right = jss.erf((self.histogram_support_min - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        z = 0.5 * (left - right)
+
+        # Compute l (left side of bin)
+        bins = self.histogram_bins()[:-1]
+
+        # Compute probability for each bin
+        c_left = jss.erf((bins + self.histogram_bin_width - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        c_right = jss.erf((bins - target) / (jnp.sqrt(2) * self.histogram_sigma))
+        c = (1 / (2 * z)) * (c_left - c_right)
+
+        return c
+
+    def get_action_values(self, logits: jax.Array) -> jax.Array:
+        bins = self.histogram_bins()
+        bin_centres = (bins[:-1] + bins[1:]) / 2
+        probabilities = jax.nn.softmax(logits, axis=-1)
+        return probabilities @ bin_centres
+
+
+class QNetworkHLLN(QNetworkHL):
+    """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
+
+    def init_layers(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.layers = [
+            _linear(obs_dim, hidden_size, key=k1),
+            eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False),
+            _ReLU(),
+            _linear(hidden_size, hidden_size, key=k2),
+            eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False),
+            _ReLU(),
+            _linear(hidden_size, action_dim * self.num_bins, key=k3),
+        ]
+
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):
