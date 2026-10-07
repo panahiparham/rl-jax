@@ -15,7 +15,7 @@ from pathlib import Path
 
 from experiment.design import Component, Experiment, SlurmResources
 
-from agents.dqn_histogram_loss import DQNHistogramConfig
+from agents.dqn_hl import DQNHistogramConfig
 from environments.classic_control import CartpoleConfig, MountainCarConfig
 from main import ExperimentConfig
 

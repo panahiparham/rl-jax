@@ -15,7 +15,8 @@ from components.networks import (
     NatureCNNLN,
     QNetwork,
     QNetworkLN,
-    QNetworkHistogramLoss,
+    QNetworkHL,
+    QNetworkHLLN
 )
 from components.policy import (
     epsilon_greedy_action,
@@ -32,7 +33,8 @@ __all__ = [
     "NatureCNNLN",
     "QNetwork",
     "QNetworkLN",
-    "QNetworkHistogramLoss",
+    "QNetworkHL",
+    "QNetworkHLLN",
     "ReplayBuffer",
     "TimeStep",
     "build_buffer",

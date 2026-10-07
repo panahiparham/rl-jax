@@ -72,15 +72,11 @@ class QNetworkLN(eqx.Module):
         return self.layer3(x)
 
 
-class QNetworkHistogramLoss(eqx.Module):
+class QNetworkHL(eqx.Module):
     """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
 
     # Model layers
-    layer1: eqx.nn.Linear
-    ln1: eqx.nn.LayerNorm
-    layer2: eqx.nn.Linear
-    ln2: eqx.nn.LayerNorm
-    layer3: eqx.nn.Linear
+    layers: list
 
     # Histogram params
     action_dim: int = eqx.field(static=True)
@@ -98,22 +94,26 @@ class QNetworkHistogramLoss(eqx.Module):
         self.histogram_support_max = histogram_support_max
         self.histogram_bin_width = (histogram_support_max - histogram_support_min) / num_bins
         self.histogram_sigma = sigma_ratio * self.histogram_bin_width
+        self.init_layers(obs_dim, action_dim, hidden_size, key)
 
+    def init_layers(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
-        self.layer1 = _linear(obs_dim, hidden_size, key=k1)
-        self.ln1 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
-        self.layer2 = _linear(hidden_size, hidden_size, key=k2)
-        self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
-        self.layer3 = _linear(hidden_size, action_dim * self.num_bins, key=k3)
+        self.layers = [
+            _linear(obs_dim, hidden_size, key=k1),
+            eqx.nn.Lambda(jax.nn.relu),
+            _linear(hidden_size, hidden_size, key=k2),
+            eqx.nn.Lambda(jax.nn.relu),
+            _linear(hidden_size, action_dim * self.num_bins, key=k3),
+        ]
+
 
     def __call__(self, x: jax.Array):
         x = jnp.ravel(x)
-        x = jax.nn.relu(self.ln1(self.layer1(x)))
-        x = jax.nn.relu(self.ln2(self.layer2(x)))
+        for layer in self.layers:
+            x = layer(x)
 
-        # Returns the raw logits
-        logits = self.layer3(x)
-        logits = jnp.reshape(logits, (self.action_dim, self.num_bins))
+        # Raw logits from network
+        logits = jnp.reshape(x, (self.action_dim, self.num_bins))
         return logits
 
     def histogram_bins(self):
@@ -146,6 +146,22 @@ class QNetworkHistogramLoss(eqx.Module):
         bin_centres = (bins[:-1] + bins[1:]) / 2
         probabilities = jax.nn.softmax(logits, axis=-1)
         return probabilities @ bin_centres
+
+class QNetworkHLLN(QNetworkHL):
+    """QNetwork with histogram loss and no-affine LayerNorm after each hidden layer."""
+
+    def init_layers(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
+        k1, k2, k3 = jax.random.split(key, 3)
+        self.layers = [
+            _linear(obs_dim, hidden_size, key=k1),
+            eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False),
+            eqx.nn.Lambda(jax.nn.relu),
+            _linear(hidden_size, hidden_size, key=k2),
+            eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False),
+            eqx.nn.Lambda(jax.nn.relu),
+            _linear(hidden_size, action_dim * self.num_bins, key=k3),
+        ]
+
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):

@@ -1,17 +1,15 @@
 import math
 from dataclasses import dataclass
-from typing import Any, NamedTuple
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import optax
 
-from agents.dqn import DQNConfig
+from agents.dqn import DQNAgent, DQNConfig, DQNState
 from components import (
-    BufferState,
-    QNetworkHistogramLoss,
-    build_buffer,
+    QNetworkHL,
+    QNetworkHLLN,
     epsilon_greedy_action,
     linear_epsilon,
 )
@@ -28,7 +26,7 @@ class DQNHistogramConfig(DQNConfig):
     """
 
     # Different network architecture needed for histogram loss
-    NETWORK_PRESET: str = "mlp_histogram"
+    NETWORK_PRESET: str = "mlp_hl"
 
     # Histogram params
     NUM_BINS: int = 100
@@ -37,43 +35,14 @@ class DQNHistogramConfig(DQNConfig):
     SUPPORT_UPPER_BOUND: float = 100
     SIGMA_RATIO: float = 2.0
 
-
-class DQNState(NamedTuple):
-    q: eqx.Module
-    target_q: eqx.Module
-    opt_state: Any
-    buffer_state: BufferState
-    t: jax.Array
-
-
-class DQNHistogramAgent:
-    def __init__(self, config: DQNHistogramConfig):
-        self._config = config
-        self._buffer = build_buffer(
-            config.BUFFER,
-            capacity=config.BUFFER_SIZE,
-            batch_size=config.BATCH_SIZE,
-            n_step=config.N_STEP,
-            gamma=config.GAMMA,
-        )
-        self._optimizer = optax.adam(config.LR, eps=config.ADAM_EPS)
-
+class DQNHistogramAgent(DQNAgent):
     def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
         config = self._config
-        if config.NETWORK_PRESET == "mlp_histogram":
-            return QNetworkHistogramLoss(math.prod(obs_shape), action_dim, config.HIDDEN_SIZE, key, config.NUM_BINS, config.SUPPORT_LOWER_BOUND, config.SUPPORT_UPPER_BOUND, config.SIGMA_RATIO)
+        if config.NETWORK_PRESET == "mlp_hl":
+            return QNetworkHL(math.prod(obs_shape), action_dim, config.HIDDEN_SIZE, key, config.NUM_BINS, config.SUPPORT_LOWER_BOUND, config.SUPPORT_UPPER_BOUND, config.SIGMA_RATIO)
+        elif config.NETWORK_PRESET == "mlp_hl_ln":
+            return QNetworkHLLN(math.prod(obs_shape), action_dim, config.HIDDEN_SIZE, key, config.NUM_BINS, config.SUPPORT_LOWER_BOUND, config.SUPPORT_UPPER_BOUND, config.SIGMA_RATIO)
         raise ValueError(f"unknown NETWORK_PRESET {config.NETWORK_PRESET!r}")
-
-    def init(self, key: jax.Array, observation_space, action_space):
-        obs_shape = observation_space.shape
-        q = self._build_q(key, obs_shape, action_space.n)
-        return DQNState(
-            q=q,
-            target_q=q,
-            opt_state=self._optimizer.init(eqx.filter(q, eqx.is_array)),
-            buffer_state=self._buffer.init(observation_space),
-            t=jnp.asarray(0, jnp.int32),
-        )
 
     def act(self, state: DQNState, key: jax.Array, obs: jax.Array):
         config = self._config
@@ -93,7 +62,7 @@ class DQNHistogramAgent:
         """One gradient step on the masked n-step TD loss."""
         batch = self._buffer.sample(state.buffer_state, key)
 
-        def loss_fn(q: QNetworkHistogramLoss) -> jax.Array:
+        def loss_fn(q: QNetworkLNHistogramLoss) -> jax.Array:
             # Get logits from network
             logits = jax.vmap(q)(batch.obs) # batch by num_actions by num_bins
             logits_a = logits[jnp.arange(logits.shape[0]), batch.action]
@@ -124,43 +93,3 @@ class DQNHistogramAgent:
         return state._replace(
             q=eqx.apply_updates(state.q, updates), opt_state=opt_state
         )
-
-    def update(
-        self,
-        state: DQNState,
-        key: jax.Array,
-        obs: jax.Array,
-        action: jax.Array,
-        reward: jax.Array,
-        termination: jax.Array,
-        truncation: jax.Array,
-        discount: jax.Array,
-    ):
-        config = self._config
-        if config.REWARD_CLIP:
-            reward = jnp.sign(reward)
-        buffer_state = self._buffer.add(
-            state.buffer_state,
-            obs,
-            action,
-            reward,
-            termination,
-            truncation,
-            discount,
-        )
-        state = state._replace(buffer_state=buffer_state)
-
-        can_train = (
-            self._buffer.can_sample(buffer_state)
-            & (state.t >= config.LEARNING_STARTS)
-            & (state.t % config.TRAIN_FREQUENCY == 0)
-        )
-        state = jax.lax.cond(
-            can_train, lambda: self._train_step(state, key), lambda: state
-        )
-        target_q = jax.lax.cond(
-            state.t % config.TARGET_NETWORK_FREQUENCY == 0,
-            lambda: state.q,
-            lambda: state.target_q,
-        )
-        return state._replace(target_q=target_q, t=state.t + 1)
