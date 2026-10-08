@@ -1,12 +1,12 @@
 """
 Run: DQN and Agent0, with and without HL-Gauss at each variant's best sweep config,
-on Cartpole and MountainCar.
+on MountainCar, Acrobot and Cartpole.
 
 Cheat sheet:
     Status: uv run experiments/histogram_tuned_classic_control/run.py status
-    Sweep: uv run experiments/histogram_tuned_classic_control/run.py sweep --num-workers 8
+    Sweep: uv run experiments/histogram_tuned_classic_control/run.py sweep --num-workers 120
     Single: uv run experiments/histogram_tuned_classic_control/run.py single --component dqn_hl_cartpole --seed 10
-    On the cluster: add --slurm to single or sweep, then sync
+    On the cluster: add --slurm to single or sweep (--slurm-dry-run to preview), then sync
 """
 
 from __future__ import annotations

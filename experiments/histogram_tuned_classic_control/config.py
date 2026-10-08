@@ -1,6 +1,6 @@
 """
 Define: DQN and Agent0, with and without the HL-Gauss histogram loss, on Classic
-Control environments (Cartpole, MountainCar), 100 seeds each.
+Control environments (MountainCar, Acrobot, Cartpole), 100 seeds each.
 
 - ``dqn_hl`` / ``dqn_hl_ln_notarget``: each variant of
   ``experiments/histogram_ln_notarget_classic_control`` at its best grid point
@@ -11,7 +11,7 @@ Control environments (Cartpole, MountainCar), 100 seeds each.
 The baselines are rerun here rather than read from those experiments' stores. Their
 configs are taken from those experiments' components, so the hypers match exactly.
 Seeds are ``range(10, 110)`` like theirs, so none of the sweep's seeds (0-9) that
-picked the histogram configs are reused. Acrobot is added once its sweep finishes.
+picked the histogram configs are reused.
 """
 
 from __future__ import annotations
@@ -46,9 +46,11 @@ _BEST = {
     ("dqn_hl", "mountaincar"): (200, 1.5, 100, 4.0 ** -5),
     ("dqn_hl_ln_notarget", "cartpole"): (100, 2.5, 200, 4.0 ** -6),
     ("dqn_hl_ln_notarget", "mountaincar"): (100, 2.5, 100, 4.0 ** -6),
+    ("dqn_hl", "acrobot"): (200, 2.5, 200, 4.0 ** -5),
+    ("dqn_hl_ln_notarget", "acrobot"): (200, 2.0, 100, 4.0 ** -5),
 }
 
-ENVIRONMENTS = ["cartpole", "mountaincar"]
+ENVIRONMENTS = ["mountaincar", "acrobot", "cartpole"]
 _SEEDS = list(range(10, 110))
 
 
