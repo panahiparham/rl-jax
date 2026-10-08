@@ -12,6 +12,12 @@ learning rate:
 Follows up ``experiments/histogram_grid_classic_control``, whose grid, other
 hypers and 10 seeds per grid point are kept unchanged. Acrobot was added later;
 its hypers in ``experiments/tuned`` match these, apart from the swept LR.
+
+``dqn_hl_ln_notarget`` later got 20 more seeds per grid point (30 in all): rerun
+on 100 seeds in ``experiments/histogram_tuned_classic_control``, its 10-seed picks
+on MountainCar and Acrobot failed outright on 9-16% of seeds, too rare for 10 seeds
+to catch. The extra seeds are ``range(110, 130)``, past that rerun's ``range(10, 110)``,
+so no seed that picks a config is reused to evaluate it.
 """
 
 from __future__ import annotations
@@ -35,11 +41,12 @@ LR_SWEEP = [4.0 ** -i for i in (3, 4, 5, 6, 7)]
 # value, so sweeping the two bounds separately would add lopsided ranges.
 SUPPORT_RANGES = [100, 200]
 _SEEDS = list(range(10))
+_EXTRA_SEEDS = list(range(110, 130))
 
-# Component prefix -> (NETWORK_PRESET, TARGET_NETWORK_FREQUENCY).
+# Component prefix -> (NETWORK_PRESET, TARGET_NETWORK_FREQUENCY, seeds).
 VARIANTS = {
-    "dqn_hl": ("mlp_hl", 128),
-    "dqn_hl_ln_notarget": ("mlp_hl_ln", 1),
+    "dqn_hl": ("mlp_hl", 128, _SEEDS),
+    "dqn_hl_ln_notarget": ("mlp_hl_ln", 1, _SEEDS + _EXTRA_SEEDS),
 }
 
 
@@ -88,13 +95,13 @@ def _components(env: str, env_hypers) -> list[Component]:
                 "AGENT_HYPERS.NUM_BINS": NUM_BINS_SWEEP,
                 "AGENT_HYPERS.LR": LR_SWEEP,
             },
-            seeds=_SEEDS,
-            # A shard of one LR's seeds. SIGMA_RATIO and NUM_BINS fix static
+            seeds=seeds,
+            # A shard of 10 of one LR's seeds. SIGMA_RATIO and NUM_BINS fix static
             # network fields, so each pair is batched apart anyway; LR is traced,
             # and leaving this unset would batch all five LRs into one shard.
             shard_size=len(_SEEDS),
         )
-        for variant, (preset, target_frequency) in VARIANTS.items()
+        for variant, (preset, target_frequency, seeds) in VARIANTS.items()
         for support in SUPPORT_RANGES
     ]
 
