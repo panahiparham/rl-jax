@@ -18,6 +18,41 @@ _GAMES = [
     "demon_attack",
     "video_pinball",
     "star_gunner",
+    "alien",
+    "amidar",
+    "asteroids",
+    "bank_heist",
+    "berzerk",
+    "bowling",
+    "boxing",
+    "chopper_command",
+    "crazy_climber",
+    "enduro",
+    "fishing_derby",
+    "freeway",
+    "frostbite",
+    "gravitar",
+    "hero",
+    "ice_hockey",
+    "jamesbond",
+    "kangaroo",
+    "krull",
+    "kung_fu_master",
+    "montezuma_revenge",
+    "pitfall",
+    "private_eye",
+    "riverraid",
+    "road_runner",
+    "robotank",
+    "skiing",
+    "solaris",
+    "tennis",
+    "time_pilot",
+    "tutankham",
+    "up_n_down",
+    "wizard_of_wor",
+    "yars_revenge",
+    "zaxxon",
 ]
 
 # Start from the DQN hypers; Agent0 and Agent1 adapt them below.
@@ -68,5 +103,7 @@ EXPERIMENT = Experiment(
     # Five packed runs (parallel_shards=5) share one GPU through CUDA MPS,
     # with a CPU each.
     # atari_200m_deterministic's packed workers took about 20h.
-    slurm=SlurmResources(time="23:59:00", gpus=1, mps=True, cpus_per_task=5),
+    slurm=SlurmResources(
+        time="23:59:00", gpus=1, mps=True, cpus_per_task=5, account="aip-whitem"
+    ),
 )
