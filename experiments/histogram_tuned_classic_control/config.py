@@ -40,14 +40,16 @@ _TUNED = _load_config("tuned").EXPERIMENT
 _BENCHMARKING = _load_config("benchmarking_classic_control").EXPERIMENT
 
 # Best (support, SIGMA_RATIO, NUM_BINS, LR) per (variant, env), by mean lifetime
-# return, read off experiments/histogram_ln_notarget_classic_control/analysis.ipynb.
+# return, read off experiments/histogram_ln_notarget_classic_control/analysis.ipynb:
+# over 10 seeds for dqn_hl and 30 for dqn_hl_ln_notarget, whose 10-seed picks
+# failed outright on 9-16% of this experiment's seeds on MountainCar and Acrobot.
 _BEST = {
     ("dqn_hl", "cartpole"): (200, 1.0, 50, 4.0 ** -6),
     ("dqn_hl", "mountaincar"): (200, 1.5, 100, 4.0 ** -5),
-    ("dqn_hl_ln_notarget", "cartpole"): (100, 2.5, 200, 4.0 ** -6),
-    ("dqn_hl_ln_notarget", "mountaincar"): (100, 2.5, 100, 4.0 ** -6),
     ("dqn_hl", "acrobot"): (200, 2.5, 200, 4.0 ** -5),
-    ("dqn_hl_ln_notarget", "acrobot"): (200, 2.0, 100, 4.0 ** -5),
+    ("dqn_hl_ln_notarget", "cartpole"): (100, 0.75, 50, 4.0 ** -6),
+    ("dqn_hl_ln_notarget", "mountaincar"): (200, 0.5, 50, 4.0 ** -4),
+    ("dqn_hl_ln_notarget", "acrobot"): (200, 0.75, 50, 4.0 ** -6),
 }
 
 ENVIRONMENTS = ["mountaincar", "acrobot", "cartpole"]
