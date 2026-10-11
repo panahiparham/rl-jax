@@ -2034,7 +2034,7 @@ wheels = [
 [[package]]
 name = "simple-experiments"
 version = "0.1.0"
-source = { git = "https://github.com/panahiparham/simple-experiments#4fd80b0d659e7f7355b7553733d47f446076f40e" }
+source = { git = "https://github.com/panahiparham/simple-experiments#2a4366e5144edfdc588769cb8972719784623dd3" }
 dependencies = [
     { name = "numpy" },
     { name = "polars" },
