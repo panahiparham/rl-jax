@@ -7,6 +7,7 @@ from components.buffers.uniform import (
     build_buffer,
     n_step_return,
 )
+
 from components.networks import (
     MinAtarCNN,
     MinAtarCNNLN,
@@ -14,6 +15,8 @@ from components.networks import (
     NatureCNNLN,
     QNetwork,
     QNetworkLN,
+    QNetworkHL,
+    QNetworkHLLN,
 )
 from components.policy import (
     epsilon_greedy_action,
@@ -30,6 +33,8 @@ __all__ = [
     "NatureCNNLN",
     "QNetwork",
     "QNetworkLN",
+    "QNetworkHL",
+    "QNetworkHLLN",
     "ReplayBuffer",
     "TimeStep",
     "build_buffer",
