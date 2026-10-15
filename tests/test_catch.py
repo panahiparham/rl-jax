@@ -84,4 +84,4 @@ def test_dqn_agent_e2e():
     run = jax.jit(lambda key: interaction(key, agent, env, 100))
     metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
     assert metrics["reward"].shape == (100,)
-    assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+    assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()

@@ -29,7 +29,7 @@ class DQNNoHeadBiasAgent(DQNAgent):
     ) -> eqx.Module:
         q = super()._build_q(key, obs_shape, action_dim)
         if isinstance(q, QNetwork | QNetworkLN):
-            return eqx.tree_at(lambda net: net.layer3, q, _without_bias(q.layer3))
+            return eqx.tree_at(lambda net: net.out, q, _without_bias(q.out))
         if isinstance(q, NatureCNN | NatureCNNLN):
             return eqx.tree_at(lambda net: net.out, q, _without_bias(q.out))
         raise TypeError(f"no known Q-value head on {type(q).__name__}")

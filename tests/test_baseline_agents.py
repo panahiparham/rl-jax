@@ -44,7 +44,7 @@ def test_unanchored_runs_under_jit_and_vmap():
     metrics, final_carry = _run_vmapped(agent, 100)
 
     assert metrics["reward"].shape == (3, 100)
-    assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+    assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()
     buffer_state = final_carry[1].buffer_state
     assert isinstance(buffer_state, ComposedState)
     long_term = buffer_state.states[3]
@@ -68,7 +68,7 @@ def test_reservoir_runs_under_jit_and_vmap():
     metrics, final_carry = _run_vmapped(agent, 100)
 
     assert metrics["reward"].shape == (3, 100)
-    assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+    assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()
     buffer_state = final_carry[1].buffer_state
     assert isinstance(buffer_state, ComposedState)
     reservoir = buffer_state.states[2]

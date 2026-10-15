@@ -49,7 +49,7 @@ def test_dqn_runs_under_jit_and_vmap_with_n_step():
         run(jax.random.split(jax.random.key(0), 3))
     )
     assert metrics["reward"].shape == (3, 20)
-    assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+    assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()
 
 
 def test_ddqn_runs_under_jit_and_vmap_with_n_step():
@@ -69,7 +69,7 @@ def test_ddqn_runs_under_jit_and_vmap_with_n_step():
         run(jax.random.split(jax.random.key(0), 3))
     )
     assert metrics["reward"].shape == (3, 20)
-    assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+    assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()
 
 
 def _trained_q_leaves(agent_cls, config_cls):

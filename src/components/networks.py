@@ -32,19 +32,19 @@ def _linear(in_features: int, out_features: int, key: jax.Array) -> eqx.nn.Linea
 class QNetwork(eqx.Module):
     layer1: eqx.nn.Linear
     layer2: eqx.nn.Linear
-    layer3: eqx.nn.Linear
+    out: eqx.nn.Linear
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
         self.layer1 = _linear(obs_dim, hidden_size, key=k1)
         self.layer2 = _linear(hidden_size, hidden_size, key=k2)
-        self.layer3 = _linear(hidden_size, action_dim, key=k3)
+        self.out = _linear(hidden_size, action_dim, key=k3)
 
     def __call__(self, x: jax.Array):
         x = jnp.ravel(x)
         x = jax.nn.relu(self.layer1(x))
         x = jax.nn.relu(self.layer2(x))
-        return self.layer3(x)
+        return self.out(x)
 
 
 class QNetworkLN(eqx.Module):
@@ -54,7 +54,7 @@ class QNetworkLN(eqx.Module):
     ln1: eqx.nn.LayerNorm
     layer2: eqx.nn.Linear
     ln2: eqx.nn.LayerNorm
-    layer3: eqx.nn.Linear
+    out: eqx.nn.Linear
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
@@ -62,13 +62,13 @@ class QNetworkLN(eqx.Module):
         self.ln1 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
         self.layer2 = _linear(hidden_size, hidden_size, key=k2)
         self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
-        self.layer3 = _linear(hidden_size, action_dim, key=k3)
+        self.out = _linear(hidden_size, action_dim, key=k3)
 
     def __call__(self, x: jax.Array):
         x = jnp.ravel(x)
         x = jax.nn.relu(self.ln1(self.layer1(x)))
         x = jax.nn.relu(self.ln2(self.layer2(x)))
-        return self.layer3(x)
+        return self.out(x)
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):

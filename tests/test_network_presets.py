@@ -66,7 +66,7 @@ def test_mlp_ln_preset_runs_under_jit():
     run = jax.jit(lambda key: interaction(key, agent, env, 20))
     metrics, final_carry = jax.block_until_ready(run(jax.random.key(0)))
     assert metrics["reward"].shape == (20,)
-    assert np.isfinite(np.asarray(final_carry[1].q.layer3.weight)).all()
+    assert np.isfinite(np.asarray(final_carry[1].q.out.weight)).all()
 
 
 def test_nature_cnn_ln_preset_runs_under_jit():
