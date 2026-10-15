@@ -8,7 +8,7 @@ from experiment.hypers import traced
 
 from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNState
-from components import QNetwork, build_buffer
+from components import AbstractQNetwork, build_buffer
 from components.buffers.composed import ComposedBuffer
 from components.buffers.selector import NStepSelector
 from components.buffers.transition import TransitionBuffer
@@ -65,7 +65,7 @@ class EndpointAgent(DDQNAgent):
         config = self._config
         recent, long_term = self._buffer.sample_components(state.buffer_state, key)
 
-        def loss_fn(q: QNetwork) -> jax.Array:
+        def loss_fn(q: AbstractQNetwork) -> jax.Array:
             # recency rows: double-Q target
             q_sa = jax.vmap(q)(recent.obs)
             q_a = jnp.take_along_axis(q_sa, recent.action[:, None], axis=-1).squeeze(-1)

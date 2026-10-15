@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from agents.dqn import DQNAgent, DQNConfig, DQNState
-from components import QNetwork
+from components import AbstractQNetwork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -17,7 +17,7 @@ class DDQNAgent(DQNAgent):
     def _train_step(self, state: DQNState, key: jax.Array):
         batch = self._buffer.sample(state.buffer_state, key)
 
-        def loss_fn(q: QNetwork) -> jax.Array:
+        def loss_fn(q: AbstractQNetwork) -> jax.Array:
             q_sa = jax.vmap(q)(batch.obs)
             q_a = jnp.take_along_axis(q_sa, batch.action[:, None], axis=-1).squeeze(-1)
             boot_action = jnp.argmax(jax.vmap(q)(batch.boot_obs), axis=-1)

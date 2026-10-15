@@ -1,3 +1,4 @@
+import abc
 import math
 
 import equinox as eqx
@@ -29,32 +30,43 @@ def _linear(in_features: int, out_features: int, key: jax.Array) -> eqx.nn.Linea
     return _fan_in_uniform(eqx.nn.Linear(in_features, out_features, key=key), key)
 
 
-class QNetwork(eqx.Module):
+class AbstractQNetwork(eqx.Module):
+    """A torso producing features, followed by a linear Q-value head."""
+
+    out: eqx.AbstractVar[eqx.nn.Linear]
+
+    @abc.abstractmethod
+    def features(self, x: jax.Array) -> jax.Array: ...
+
+    def __call__(self, x: jax.Array):
+        return self.out(self.features(x))
+
+
+class QNetwork(AbstractQNetwork):
     layer1: eqx.nn.Linear
     layer2: eqx.nn.Linear
-    layer3: eqx.nn.Linear
+    out: eqx.nn.Linear
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
         self.layer1 = _linear(obs_dim, hidden_size, key=k1)
         self.layer2 = _linear(hidden_size, hidden_size, key=k2)
-        self.layer3 = _linear(hidden_size, action_dim, key=k3)
+        self.out = _linear(hidden_size, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         x = jnp.ravel(x)
         x = jax.nn.relu(self.layer1(x))
-        x = jax.nn.relu(self.layer2(x))
-        return self.layer3(x)
+        return jax.nn.relu(self.layer2(x))
 
 
-class QNetworkLN(eqx.Module):
+class QNetworkLN(AbstractQNetwork):
     """QNetwork with a no-affine LayerNorm after each hidden layer."""
 
     layer1: eqx.nn.Linear
     ln1: eqx.nn.LayerNorm
     layer2: eqx.nn.Linear
     ln2: eqx.nn.LayerNorm
-    layer3: eqx.nn.Linear
+    out: eqx.nn.Linear
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_size: int, key: jax.Array):
         k1, k2, k3 = jax.random.split(key, 3)
@@ -62,13 +74,12 @@ class QNetworkLN(eqx.Module):
         self.ln1 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
         self.layer2 = _linear(hidden_size, hidden_size, key=k2)
         self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
-        self.layer3 = _linear(hidden_size, action_dim, key=k3)
+        self.out = _linear(hidden_size, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         x = jnp.ravel(x)
         x = jax.nn.relu(self.ln1(self.layer1(x)))
-        x = jax.nn.relu(self.ln2(self.layer2(x)))
-        return self.layer3(x)
+        return jax.nn.relu(self.ln2(self.layer2(x)))
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):
@@ -80,7 +91,7 @@ def _nature_flat_dim(obs_shape: tuple[int, ...]):
     return 64 * h * w
 
 
-class NatureCNN(eqx.Module):
+class NatureCNN(AbstractQNetwork):
     """Nature-DQN conv torso + 512 head for channel-last image observations."""
 
     conv1: eqx.nn.Conv2d
@@ -98,17 +109,16 @@ class NatureCNN(eqx.Module):
         self.head = _linear(_nature_flat_dim(obs_shape), 512, key=k4)
         self.out = _linear(512, action_dim, key=k5)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) uint8 -> (C,H,W) float in [0,1]
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32) / 255.0
         x = jax.nn.relu(self.conv1(x))
         x = jax.nn.relu(self.conv2(x))
         x = jax.nn.relu(self.conv3(x))
-        x = jax.nn.relu(self.head(jnp.ravel(x)))
-        return self.out(x)
+        return jax.nn.relu(self.head(jnp.ravel(x)))
 
 
-class NatureCNNLN(eqx.Module):
+class NatureCNNLN(AbstractQNetwork):
     """NatureCNN with a no-affine LayerNorm after the dense head, before its relu.
 
     The conv torso is left unnormalized; only the head follows QNetworkLN's
@@ -132,14 +142,13 @@ class NatureCNNLN(eqx.Module):
         self.head_ln = eqx.nn.LayerNorm(512, use_weight=False, use_bias=False)
         self.out = _linear(512, action_dim, key=k5)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) uint8 -> (C,H,W) float in [0,1]
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32) / 255.0
         x = jax.nn.relu(self.conv1(x))
         x = jax.nn.relu(self.conv2(x))
         x = jax.nn.relu(self.conv3(x))
-        x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
-        return self.out(x)
+        return jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
 
 
 def _minatar_flat_dim(obs_shape: tuple[int, ...]):
@@ -147,7 +156,7 @@ def _minatar_flat_dim(obs_shape: tuple[int, ...]):
     return (obs_shape[0] - 2) * (obs_shape[1] - 2) * 16
 
 
-class MinAtarCNN(eqx.Module):
+class MinAtarCNN(AbstractQNetwork):
     """MinAtar DQN torso: one 3x3 conv with 16 filters, then a 128 unit head."""
 
     conv: eqx.nn.Conv2d
@@ -160,15 +169,14 @@ class MinAtarCNN(eqx.Module):
         self.head = _linear(_minatar_flat_dim(obs_shape), 128, key=k2)
         self.out = _linear(128, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) bool -> (C,H,W) float
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
         x = jax.nn.relu(self.conv(x))
-        x = jax.nn.relu(self.head(jnp.ravel(x)))
-        return self.out(x)
+        return jax.nn.relu(self.head(jnp.ravel(x)))
 
 
-class MinAtarCNNLN(eqx.Module):
+class MinAtarCNNLN(AbstractQNetwork):
     """MinAtarCNN with a no-affine LayerNorm after the dense head, before its relu.
 
     The conv layer is left unnormalized, following NatureCNNLN's convention.
@@ -186,9 +194,58 @@ class MinAtarCNNLN(eqx.Module):
         self.head_ln = eqx.nn.LayerNorm(128, use_weight=False, use_bias=False)
         self.out = _linear(128, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) bool -> (C,H,W) float
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
         x = jax.nn.relu(self.conv(x))
-        x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
-        return self.out(x)
+        return jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
+
+
+def _zeroed(linear: eqx.nn.Linear) -> eqx.nn.Linear:
+    zeroed: eqx.nn.Linear = eqx.tree_at(
+        lambda lay: (lay.weight, lay.bias),
+        linear,
+        (jnp.zeros_like(linear.weight), jnp.zeros(linear.weight.shape[0])),
+    )
+    return zeroed
+
+
+class DualHeadNetwork(eqx.Module):
+    """A Q network plus a zero-initialized h head on the same features.
+
+    The h head reads the features through a stop-gradient, so only the Q head
+    trains the torso.
+    """
+
+    q: AbstractQNetwork
+    h_out: eqx.nn.Linear
+
+    def __init__(self, q: AbstractQNetwork) -> None:
+        self.q = q
+        self.h_out = _zeroed(q.out)
+
+    def __call__(self, x: jax.Array):
+        features = self.q.features(x)
+        return self.q.out(features), self.h_out(jax.lax.stop_gradient(features))
+
+
+def build_q_network(
+    preset: str,
+    obs_shape: tuple[int, ...],
+    action_dim: int,
+    hidden_size: int,
+    key: jax.Array,
+) -> AbstractQNetwork:
+    if preset == "mlp":
+        return QNetwork(math.prod(obs_shape), action_dim, hidden_size, key)
+    if preset == "mlp_ln":
+        return QNetworkLN(math.prod(obs_shape), action_dim, hidden_size, key)
+    if preset == "nature_cnn":
+        return NatureCNN(obs_shape, action_dim, key)
+    if preset == "nature_cnn_ln":
+        return NatureCNNLN(obs_shape, action_dim, key)
+    if preset == "minatar_cnn":
+        return MinAtarCNN(obs_shape, action_dim, key)
+    if preset == "minatar_cnn_ln":
+        return MinAtarCNNLN(obs_shape, action_dim, key)
+    raise ValueError(f"unknown NETWORK_PRESET {preset!r}")

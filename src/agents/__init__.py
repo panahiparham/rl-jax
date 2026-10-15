@@ -6,6 +6,7 @@ from agents.ddqn import DDQNAgent, DDQNConfig
 from agents.dqn import DQNAgent, DQNConfig
 from agents.dqn_noheadbias import DQNNoHeadBiasAgent, DQNNoHeadBiasConfig
 from agents.endpoint import EndpointAgent, EndpointConfig
+from agents.qrc import QRCAgent, QRCConfig
 from agents.random import RandomAgent, RandomConfig
 from agents.random_buffered import RandomBufferAgent, RandomBufferConfig
 from agents.reservoir import ReservoirAgent, ReservoirConfig
@@ -30,6 +31,7 @@ AGENTS: dict[str, AgentSpec] = {
     "agent0": AgentSpec(Agent0Config, Agent0Agent),
     "agent1": AgentSpec(Agent1Config, Agent1Agent),
     "endpoint": AgentSpec(EndpointConfig, EndpointAgent),
+    "qrc": AgentSpec(QRCConfig, QRCAgent),
     "unanchored": AgentSpec(UnanchoredConfig, UnanchoredAgent),
     "reservoir": AgentSpec(ReservoirConfig, ReservoirAgent),
 }
@@ -50,6 +52,7 @@ __all__ = [
     "DQNConfig",
     "DQNNoHeadBiasConfig",
     "EndpointConfig",
+    "QRCConfig",
     "RandomBufferConfig",
     "RandomConfig",
     "ReservoirConfig",

@@ -4,7 +4,7 @@ import equinox as eqx
 import jax
 
 from agents.dqn import DQNAgent, DQNConfig
-from components import NatureCNN, NatureCNNLN, QNetwork, QNetworkLN
+from components import AbstractQNetwork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -26,10 +26,9 @@ def _without_bias(linear: eqx.nn.Linear):
 class DQNNoHeadBiasAgent(DQNAgent):
     def _build_q(
         self, key: jax.Array, obs_shape: tuple[int, ...], action_dim: int
-    ) -> eqx.Module:
+    ) -> AbstractQNetwork:
         q = super()._build_q(key, obs_shape, action_dim)
-        if isinstance(q, QNetwork | QNetworkLN):
-            return eqx.tree_at(lambda net: net.layer3, q, _without_bias(q.layer3))
-        if isinstance(q, NatureCNN | NatureCNNLN):
-            return eqx.tree_at(lambda net: net.out, q, _without_bias(q.out))
-        raise TypeError(f"no known Q-value head on {type(q).__name__}")
+        unbiased: AbstractQNetwork = eqx.tree_at(
+            lambda net: net.out, q, _without_bias(q.out)
+        )
+        return unbiased
