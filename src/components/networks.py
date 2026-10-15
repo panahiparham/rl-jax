@@ -199,3 +199,25 @@ class MinAtarCNNLN(AbstractQNetwork):
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
         x = jax.nn.relu(self.conv(x))
         return jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
+
+
+def build_q_network(
+    preset: str,
+    obs_shape: tuple[int, ...],
+    action_dim: int,
+    hidden_size: int,
+    key: jax.Array,
+) -> AbstractQNetwork:
+    if preset == "mlp":
+        return QNetwork(math.prod(obs_shape), action_dim, hidden_size, key)
+    if preset == "mlp_ln":
+        return QNetworkLN(math.prod(obs_shape), action_dim, hidden_size, key)
+    if preset == "nature_cnn":
+        return NatureCNN(obs_shape, action_dim, key)
+    if preset == "nature_cnn_ln":
+        return NatureCNNLN(obs_shape, action_dim, key)
+    if preset == "minatar_cnn":
+        return MinAtarCNN(obs_shape, action_dim, key)
+    if preset == "minatar_cnn_ln":
+        return MinAtarCNNLN(obs_shape, action_dim, key)
+    raise ValueError(f"unknown NETWORK_PRESET {preset!r}")

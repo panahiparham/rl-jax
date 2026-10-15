@@ -8,12 +8,14 @@ from components.buffers.uniform import (
     n_step_return,
 )
 from components.networks import (
+    AbstractQNetwork,
     MinAtarCNN,
     MinAtarCNNLN,
     NatureCNN,
     NatureCNNLN,
     QNetwork,
     QNetworkLN,
+    build_q_network,
 )
 from components.policy import (
     epsilon_greedy_action,
@@ -22,6 +24,7 @@ from components.policy import (
 )
 
 __all__ = [
+    "AbstractQNetwork",
     "Batch",
     "BufferState",
     "MinAtarCNN",
@@ -33,6 +36,7 @@ __all__ = [
     "ReplayBuffer",
     "TimeStep",
     "build_buffer",
+    "build_q_network",
     "epsilon_greedy_action",
     "epsilon_greedy_probs",
     "linear_epsilon",

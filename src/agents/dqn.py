@@ -1,4 +1,3 @@
-import math
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -9,13 +8,10 @@ import optax
 from experiment.hypers import traced
 
 from components import (
+    AbstractQNetwork,
     BufferState,
-    MinAtarCNN,
-    NatureCNN,
-    NatureCNNLN,
-    QNetwork,
-    QNetworkLN,
     build_buffer,
+    build_q_network,
     epsilon_greedy_action,
     linear_epsilon,
 )
@@ -46,7 +42,7 @@ class DQNConfig:
     EPSILON_DECAY_STEPS: int = traced(100_000)
     HIDDEN_SIZE: int = 64
     # "mlp"/"mlp_ln" (vector obs), "nature_cnn"/"nature_cnn_ln" (image obs) or
-    # "minatar_cnn" (MinAtar's 10x10 grid)
+    # "minatar_cnn"/"minatar_cnn_ln" (MinAtar's 10x10 grid)
     NETWORK_PRESET: str = "mlp"
     ADAM_EPS: float = traced(1e-8)
     REWARD_CLIP: bool = False  # clip to sign(reward) for the buffer and update only
@@ -73,8 +69,8 @@ class MinAtarDQNConfig(DQNConfig):
 
 
 class DQNState(NamedTuple):
-    q: eqx.Module
-    target_q: eqx.Module
+    q: AbstractQNetwork
+    target_q: AbstractQNetwork
     opt_state: Any
     buffer_state: BufferState
     t: jax.Array
@@ -92,22 +88,14 @@ class DQNAgent:
         )
         self._optimizer = optax.adam(config.LR, eps=config.ADAM_EPS)
 
-    def _build_q(self, key, obs_shape, action_dim) -> eqx.Module:
-        if self._config.NETWORK_PRESET == "minatar_cnn":
-            return MinAtarCNN(obs_shape, action_dim, key)
-        if self._config.NETWORK_PRESET == "nature_cnn":
-            return NatureCNN(obs_shape, action_dim, key)
-        if self._config.NETWORK_PRESET == "nature_cnn_ln":
-            return NatureCNNLN(obs_shape, action_dim, key)
-        if self._config.NETWORK_PRESET == "mlp":
-            return QNetwork(
-                math.prod(obs_shape), action_dim, self._config.HIDDEN_SIZE, key
-            )
-        if self._config.NETWORK_PRESET == "mlp_ln":
-            return QNetworkLN(
-                math.prod(obs_shape), action_dim, self._config.HIDDEN_SIZE, key
-            )
-        raise ValueError(f"unknown NETWORK_PRESET {self._config.NETWORK_PRESET!r}")
+    def _build_q(self, key, obs_shape, action_dim) -> AbstractQNetwork:
+        return build_q_network(
+            self._config.NETWORK_PRESET,
+            obs_shape,
+            action_dim,
+            self._config.HIDDEN_SIZE,
+            key,
+        )
 
     def init(self, key: jax.Array, observation_space, action_space):
         obs_shape = observation_space.shape
@@ -136,7 +124,7 @@ class DQNAgent:
         """One gradient step on the masked n-step TD loss."""
         batch = self._buffer.sample(state.buffer_state, key)
 
-        def loss_fn(q: QNetwork) -> jax.Array:
+        def loss_fn(q: AbstractQNetwork) -> jax.Array:
             q_sa = jax.vmap(q)(batch.obs)
             q_a = jnp.take_along_axis(q_sa, batch.action[:, None], axis=-1).squeeze(-1)
             boot = jnp.max(jax.vmap(state.target_q)(batch.boot_obs), axis=-1)
