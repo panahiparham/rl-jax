@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from components import (
+    DualHeadNetwork,
     MinAtarCNN,
     MinAtarCNNLN,
     NatureCNN,
@@ -162,3 +163,54 @@ def test_unknown_preset_is_rejected():
     """A misspelled preset fails loudly instead of picking a default."""
     with pytest.raises(ValueError, match="unknown NETWORK_PRESET"):
         build_q_network("mlp_typo", (6,), 5, 8, _KEY)
+
+
+# --- dual head ----------------------------------------------------------------
+
+
+def _dual_head_with_random_h(preset: str):
+    obs_shape = _PRESET_OBS_SHAPES[preset]
+    net = DualHeadNetwork(build_q_network(preset, obs_shape, 5, 8, _KEY))
+    weight = jax.random.normal(jax.random.key(1), net.h_out.weight.shape)
+    return eqx.tree_at(lambda n: n.h_out.weight, net, weight), obs_shape
+
+
+@pytest.mark.parametrize("preset", sorted(_PRESET_OBS_SHAPES))
+def test_dual_head_starts_with_zero_h_and_unchanged_q(preset: str):
+    """h predicts zero everywhere at init, and the Q head is the wrapped
+    network itself."""
+    obs_shape = _PRESET_OBS_SHAPES[preset]
+    q_net = build_q_network(preset, obs_shape, 5, 8, _KEY)
+    obs = jax.random.uniform(jax.random.key(2), obs_shape)
+
+    q_values, h_values = DualHeadNetwork(q_net)(obs)
+
+    assert jnp.array_equal(q_values, q_net(obs))
+    assert jnp.array_equal(h_values, jnp.zeros(5))
+
+
+@pytest.mark.parametrize("preset", sorted(_PRESET_OBS_SHAPES))
+def test_h_gradient_reaches_only_the_h_head(preset: str):
+    """Training h leaves the shared torso and the Q head untouched."""
+    net, obs_shape = _dual_head_with_random_h(preset)
+    obs = jax.random.uniform(jax.random.key(2), obs_shape)
+
+    grads = eqx.filter_grad(lambda n: jnp.sum(n(obs)[1]))(net)
+
+    q_grads = jax.tree.leaves(grads.q)
+    assert q_grads
+    assert all(jnp.all(leaf == 0) for leaf in q_grads)
+    assert jnp.any(grads.h_out.weight != 0)
+
+
+@pytest.mark.parametrize("preset", sorted(_PRESET_OBS_SHAPES))
+def test_q_gradient_skips_the_h_head(preset: str):
+    """Training Q reaches the torso but not the h head."""
+    net, obs_shape = _dual_head_with_random_h(preset)
+    obs = jax.random.uniform(jax.random.key(2), obs_shape)
+
+    grads = eqx.filter_grad(lambda n: jnp.sum(n(obs)[0]))(net)
+
+    assert all(jnp.all(leaf == 0) for leaf in jax.tree.leaves(grads.h_out))
+    torso_grads = eqx.tree_at(lambda q: q.out, grads.q, None)
+    assert any(jnp.any(leaf != 0) for leaf in jax.tree.leaves(torso_grads))
