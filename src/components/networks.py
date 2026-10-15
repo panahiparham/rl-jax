@@ -201,6 +201,34 @@ class MinAtarCNNLN(AbstractQNetwork):
         return jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
 
 
+def _zeroed(linear: eqx.nn.Linear) -> eqx.nn.Linear:
+    zeroed: eqx.nn.Linear = eqx.tree_at(
+        lambda lay: (lay.weight, lay.bias),
+        linear,
+        (jnp.zeros_like(linear.weight), jnp.zeros(linear.weight.shape[0])),
+    )
+    return zeroed
+
+
+class DualHeadNetwork(eqx.Module):
+    """A Q network plus a zero-initialized h head on the same features.
+
+    The h head reads the features through a stop-gradient, so only the Q head
+    trains the torso.
+    """
+
+    q: AbstractQNetwork
+    h_out: eqx.nn.Linear
+
+    def __init__(self, q: AbstractQNetwork) -> None:
+        self.q = q
+        self.h_out = _zeroed(q.out)
+
+    def __call__(self, x: jax.Array):
+        features = self.q.features(x)
+        return self.q.out(features), self.h_out(jax.lax.stop_gradient(features))
+
+
 def build_q_network(
     preset: str,
     obs_shape: tuple[int, ...],

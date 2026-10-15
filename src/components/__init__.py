@@ -9,6 +9,7 @@ from components.buffers.uniform import (
 )
 from components.networks import (
     AbstractQNetwork,
+    DualHeadNetwork,
     MinAtarCNN,
     MinAtarCNNLN,
     NatureCNN,
@@ -27,6 +28,7 @@ __all__ = [
     "AbstractQNetwork",
     "Batch",
     "BufferState",
+    "DualHeadNetwork",
     "MinAtarCNN",
     "MinAtarCNNLN",
     "NatureCNN",
