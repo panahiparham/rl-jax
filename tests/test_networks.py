@@ -23,6 +23,7 @@ from components import (
     NatureCNNLN,
     QNetwork,
     QNetworkLN,
+    build_q_network,
 )
 
 
@@ -135,3 +136,29 @@ def test_layers_are_drawn_from_the_fan_in_uniform(name: str):
         assert np.abs(weight).max() > 0.9 * bound
         assert np.abs(bias).max() <= bound
         assert np.abs(bias).max() > 0
+
+
+# --- preset builder -----------------------------------------------------------
+
+_PRESET_OBS_SHAPES = {
+    "mlp": (6,),
+    "mlp_ln": (6,),
+    "nature_cnn": (36, 36, 4),
+    "nature_cnn_ln": (36, 36, 4),
+    "minatar_cnn": (10, 10, 4),
+    "minatar_cnn_ln": (10, 10, 4),
+}
+
+
+@pytest.mark.parametrize("preset", sorted(_PRESET_OBS_SHAPES))
+def test_every_preset_builds_a_q_network(preset: str):
+    """Each preset name yields a network giving one Q-value per action."""
+    obs_shape = _PRESET_OBS_SHAPES[preset]
+    net = build_q_network(preset, obs_shape, 5, 8, _KEY)
+    assert net(jnp.zeros(obs_shape)).shape == (5,)
+
+
+def test_unknown_preset_is_rejected():
+    """A misspelled preset fails loudly instead of picking a default."""
+    with pytest.raises(ValueError, match="unknown NETWORK_PRESET"):
+        build_q_network("mlp_typo", (6,), 5, 8, _KEY)
