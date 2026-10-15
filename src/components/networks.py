@@ -91,7 +91,7 @@ def _nature_flat_dim(obs_shape: tuple[int, ...]):
     return 64 * h * w
 
 
-class NatureCNN(eqx.Module):
+class NatureCNN(AbstractQNetwork):
     """Nature-DQN conv torso + 512 head for channel-last image observations."""
 
     conv1: eqx.nn.Conv2d
@@ -109,17 +109,16 @@ class NatureCNN(eqx.Module):
         self.head = _linear(_nature_flat_dim(obs_shape), 512, key=k4)
         self.out = _linear(512, action_dim, key=k5)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) uint8 -> (C,H,W) float in [0,1]
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32) / 255.0
         x = jax.nn.relu(self.conv1(x))
         x = jax.nn.relu(self.conv2(x))
         x = jax.nn.relu(self.conv3(x))
-        x = jax.nn.relu(self.head(jnp.ravel(x)))
-        return self.out(x)
+        return jax.nn.relu(self.head(jnp.ravel(x)))
 
 
-class NatureCNNLN(eqx.Module):
+class NatureCNNLN(AbstractQNetwork):
     """NatureCNN with a no-affine LayerNorm after the dense head, before its relu.
 
     The conv torso is left unnormalized; only the head follows QNetworkLN's
@@ -143,14 +142,13 @@ class NatureCNNLN(eqx.Module):
         self.head_ln = eqx.nn.LayerNorm(512, use_weight=False, use_bias=False)
         self.out = _linear(512, action_dim, key=k5)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) uint8 -> (C,H,W) float in [0,1]
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32) / 255.0
         x = jax.nn.relu(self.conv1(x))
         x = jax.nn.relu(self.conv2(x))
         x = jax.nn.relu(self.conv3(x))
-        x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
-        return self.out(x)
+        return jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
 
 
 def _minatar_flat_dim(obs_shape: tuple[int, ...]):
@@ -158,7 +156,7 @@ def _minatar_flat_dim(obs_shape: tuple[int, ...]):
     return (obs_shape[0] - 2) * (obs_shape[1] - 2) * 16
 
 
-class MinAtarCNN(eqx.Module):
+class MinAtarCNN(AbstractQNetwork):
     """MinAtar DQN torso: one 3x3 conv with 16 filters, then a 128 unit head."""
 
     conv: eqx.nn.Conv2d
@@ -171,15 +169,14 @@ class MinAtarCNN(eqx.Module):
         self.head = _linear(_minatar_flat_dim(obs_shape), 128, key=k2)
         self.out = _linear(128, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) bool -> (C,H,W) float
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
         x = jax.nn.relu(self.conv(x))
-        x = jax.nn.relu(self.head(jnp.ravel(x)))
-        return self.out(x)
+        return jax.nn.relu(self.head(jnp.ravel(x)))
 
 
-class MinAtarCNNLN(eqx.Module):
+class MinAtarCNNLN(AbstractQNetwork):
     """MinAtarCNN with a no-affine LayerNorm after the dense head, before its relu.
 
     The conv layer is left unnormalized, following NatureCNNLN's convention.
@@ -197,9 +194,8 @@ class MinAtarCNNLN(eqx.Module):
         self.head_ln = eqx.nn.LayerNorm(128, use_weight=False, use_bias=False)
         self.out = _linear(128, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         # (H,W,C) bool -> (C,H,W) float
         x = jnp.transpose(x, (2, 0, 1)).astype(jnp.float32)
         x = jax.nn.relu(self.conv(x))
-        x = jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
-        return self.out(x)
+        return jax.nn.relu(self.head_ln(self.head(jnp.ravel(x))))
