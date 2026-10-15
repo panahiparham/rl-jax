@@ -81,6 +81,7 @@ module = [
     "agents.ddqn",
     "agents.dqn",
     "agents.endpoint",
+    "agents.qrc",
     "agents.random",
     "agents.random_buffered",
     "components.buffers.uniform",
