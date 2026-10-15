@@ -1,3 +1,4 @@
+import abc
 import math
 
 import equinox as eqx
@@ -29,7 +30,19 @@ def _linear(in_features: int, out_features: int, key: jax.Array) -> eqx.nn.Linea
     return _fan_in_uniform(eqx.nn.Linear(in_features, out_features, key=key), key)
 
 
-class QNetwork(eqx.Module):
+class AbstractQNetwork(eqx.Module):
+    """A torso producing features, followed by a linear Q-value head."""
+
+    out: eqx.AbstractVar[eqx.nn.Linear]
+
+    @abc.abstractmethod
+    def features(self, x: jax.Array) -> jax.Array: ...
+
+    def __call__(self, x: jax.Array):
+        return self.out(self.features(x))
+
+
+class QNetwork(AbstractQNetwork):
     layer1: eqx.nn.Linear
     layer2: eqx.nn.Linear
     out: eqx.nn.Linear
@@ -40,14 +53,13 @@ class QNetwork(eqx.Module):
         self.layer2 = _linear(hidden_size, hidden_size, key=k2)
         self.out = _linear(hidden_size, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         x = jnp.ravel(x)
         x = jax.nn.relu(self.layer1(x))
-        x = jax.nn.relu(self.layer2(x))
-        return self.out(x)
+        return jax.nn.relu(self.layer2(x))
 
 
-class QNetworkLN(eqx.Module):
+class QNetworkLN(AbstractQNetwork):
     """QNetwork with a no-affine LayerNorm after each hidden layer."""
 
     layer1: eqx.nn.Linear
@@ -64,11 +76,10 @@ class QNetworkLN(eqx.Module):
         self.ln2 = eqx.nn.LayerNorm(hidden_size, use_weight=False, use_bias=False)
         self.out = _linear(hidden_size, action_dim, key=k3)
 
-    def __call__(self, x: jax.Array):
+    def features(self, x: jax.Array) -> jax.Array:
         x = jnp.ravel(x)
         x = jax.nn.relu(self.ln1(self.layer1(x)))
-        x = jax.nn.relu(self.ln2(self.layer2(x)))
-        return self.out(x)
+        return jax.nn.relu(self.ln2(self.layer2(x)))
 
 
 def _nature_flat_dim(obs_shape: tuple[int, ...]):
